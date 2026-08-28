@@ -2,8 +2,22 @@ import os
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
-# Project root directory is code/
-BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+# Dynamically resolve project directory structure
+_CONFIG_DIR = Path(__file__).resolve().parent
+_APP_DIR = _CONFIG_DIR.parent
+_BACKEND_DIR = _APP_DIR.parent
+_REPO_ROOT = _BACKEND_DIR.parent
+
+# Prefer REPO_ROOT if it contains the data directory or database, else BACKEND_DIR
+if (_REPO_ROOT / "data").exists() or (_REPO_ROOT / "academic_intelligence.db").exists():
+    BASE_DIR = _REPO_ROOT
+else:
+    BASE_DIR = _BACKEND_DIR
+
+# Sanitize DATABASE_URL (Render & Supabase provide 'postgres://', SQLAlchemy 2.0+ requires 'postgresql://')
+_raw_db_url = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'academic_intelligence.db'}")
+if _raw_db_url.startswith("postgres://"):
+    _raw_db_url = _raw_db_url.replace("postgres://", "postgresql://", 1)
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI-Based Student Academic Risk & Performance Intelligence System"
@@ -16,7 +30,7 @@ class Settings(BaseSettings):
     BASE_DIR: Path = BASE_DIR
 
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'academic_intelligence.db'}")
+    DATABASE_URL: str = _raw_db_url
 
     # Security / JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "csm_academic_intelligence_super_secret_jwt_key_2026")
