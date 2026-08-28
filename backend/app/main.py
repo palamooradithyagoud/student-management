@@ -34,17 +34,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Configuration - supports local development and deployed Render frontend domains
+# CORS Configuration
+origins = [
+    "https://student-management-frontend-hr9l.onrender.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "https://student-management-frontend-hr9l.onrender.com",
-    ],
-    allow_origin_regex=r"https://.*\.onrender\.com",
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
