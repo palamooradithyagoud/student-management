@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, LogOut, GraduationCap } from 'lucide-react';
+import { ShieldCheck, LogOut } from 'lucide-react';
+import CSMLogo from '@/components/CSMLogo';
 import { getAuthUser, clearAuthSession, UserProfile } from '@/lib/auth';
 
 export default function Navbar() {
@@ -24,9 +25,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Brand & Department info */}
           <div className="flex items-center space-x-3">
-            <div className="bg-emerald-500/10 border border-emerald-500/30 p-2 rounded-xl text-emerald-400">
-              <GraduationCap className="w-6 h-6" />
-            </div>
+            <CSMLogo size="sm" />
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-base sm:text-lg tracking-tight text-white">
@@ -48,7 +47,7 @@ export default function Navbar() {
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               <div className="text-left">
                 <p className="text-xs font-semibold text-slate-200">
-                  {user?.username || 'hod.csm'}
+                  Prof. M A JABBAR
                 </p>
                 <p className="text-[10px] text-emerald-400 font-mono font-medium">
                   HOD • CSM

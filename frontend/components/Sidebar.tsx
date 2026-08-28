@@ -6,8 +6,10 @@ import {
   LayoutGrid, 
   Trophy, 
   BookOpen,
-  LogOut
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
+import CSMLogo from '@/components/CSMLogo';
 import { clearAuthSession } from '@/lib/auth';
 
 const NAV_ITEMS = [
@@ -39,11 +41,16 @@ export default function Sidebar() {
       <div>
         {/* Brand Header */}
         <div className="mb-10 pl-1 group cursor-default">
-          <div className="font-black text-2xl text-slate-900 tracking-tight leading-none group-hover:text-emerald-700 transition-colors duration-300">
-            CSM
-          </div>
-          <div className="text-xs font-semibold text-slate-500 tracking-wider mt-1">
-            VCE College
+          <div className="flex items-center space-x-3">
+            <CSMLogo size="sm" />
+            <div>
+              <div className="font-black text-2xl text-slate-900 tracking-tight leading-none group-hover:text-emerald-700 transition-colors duration-300">
+                CSM
+              </div>
+              <div className="text-[11px] font-semibold text-slate-500 tracking-wider mt-1">
+                VCE College
+              </div>
+            </div>
           </div>
         </div>
 
@@ -79,17 +86,33 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      {/* Footer copyright */}
-      <div className="pt-6 space-y-4">
+      {/* Footer HOD info & copyright */}
+      <div className="pt-6 space-y-3">
+        <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl">
+          <div className="flex items-center space-x-2">
+            <div className="w-7 h-7 rounded-xl bg-[#d9f99d] flex items-center justify-center font-black text-[11px] text-slate-900 shrink-0">
+              MJ
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-slate-900 truncate">
+                Prof. M A JABBAR
+              </p>
+              <p className="text-[10px] font-semibold text-emerald-700">
+                HOD • CSM Dept
+              </p>
+            </div>
+          </div>
+        </div>
+
         <button
           onClick={() => clearAuthSession()}
-          className="flex items-center space-x-2 text-xs font-semibold text-slate-400 hover:text-rose-600 hover:bg-rose-50/50 px-4 py-2.5 rounded-xl transition-all duration-200 cursor-pointer w-full text-left active:scale-97"
+          className="flex items-center space-x-2 text-xs font-semibold text-slate-400 hover:text-rose-600 hover:bg-rose-50/50 px-3 py-2 rounded-xl transition-all duration-200 cursor-pointer w-full text-left active:scale-97"
         >
           <LogOut className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
           <span>Sign Out</span>
         </button>
 
-        <p className="text-[11px] text-slate-400 font-normal px-4">
+        <p className="text-[10px] text-slate-400 font-normal px-2">
           © 2026 CSM • VCE College
         </p>
       </div>

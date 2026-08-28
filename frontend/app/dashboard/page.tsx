@@ -170,7 +170,7 @@ export default function DashboardPage() {
               Courses & Academic Performance
             </h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              CSM Department • Artificial Intelligence & Machine Learning
+              CSM Department (AI & ML) • Head of Department: <span className="font-bold text-slate-800">Prof. M A JABBAR</span>
             </p>
           </div>
 

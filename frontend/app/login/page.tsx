@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Lock, User, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Lock, User, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import CSMLogo from '@/components/CSMLogo';
 import api from '@/lib/api';
 import { setAuthSession } from '@/lib/auth';
 
@@ -48,22 +49,19 @@ export default function LoginPage() {
       <div className="bg-white rounded-3xl sm:rounded-4xl shadow-sm border border-slate-100 p-8 sm:p-10 max-w-md w-full animate-fade-in relative overflow-hidden">
         {/* Top Brand Logo */}
         <div className="flex flex-col items-center text-center mb-7">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center text-white shadow-md mb-3">
-            <Sparkles className="w-6 h-6" />
-          </div>
+          <CSMLogo size="xl" className="mb-3" />
           
-          <div className="font-extrabold text-2xl text-slate-900 tracking-tight flex items-center gap-1">
-            <span>csm</span>
-            <span className="text-emerald-500">.ai</span>
-          </div>
+          <h1 className="font-black text-3xl text-slate-900 tracking-tight">
+            CSM
+          </h1>
 
           <p className="text-xs text-slate-500 font-medium mt-1">
-            AI-Based Academic Risk & Performance Intelligence
+            Academic Risk & Performance Intelligence System
           </p>
 
-          <div className="mt-3 inline-flex items-center gap-1.5 bg-[#d9f99d] px-3 py-1 rounded-full text-xs font-bold text-slate-900 shadow-xs">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>HOD Exclusive Portal • CSM Department</span>
+          <div className="mt-3.5 inline-flex items-center gap-1.5 bg-[#d9f99d] px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-900 shadow-xs">
+            <ShieldCheck className="w-4 h-4 text-slate-900" />
+            <span>HOD: Professor M A JABBAR</span>
           </div>
         </div>
 
