@@ -1,24 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ShieldCheck, LogOut } from 'lucide-react';
+import React from 'react';
+import { ShieldCheck } from 'lucide-react';
 import CSMLogo from '@/components/CSMLogo';
-import { getAuthUser, clearAuthSession, UserProfile } from '@/lib/auth';
 
 export default function Navbar() {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const router = useRouter();
-
-  useEffect(() => {
-    const u = getAuthUser();
-    setUser(u);
-  }, []);
-
-  const handleLogout = () => {
-    clearAuthSession();
-  };
-
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -41,7 +27,7 @@ export default function Navbar() {
             </div>
           </div>
 
-          {/* HOD Profile & Logout */}
+          {/* HOD Profile */}
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2 bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-lg">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -54,18 +40,10 @@ export default function Navbar() {
                 </p>
               </div>
             </div>
-
-            <button
-              onClick={handleLogout}
-              className="flex items-center space-x-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              title="Sign Out"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sign Out</span>
-            </button>
           </div>
         </div>
       </div>
     </header>
   );
 }
+

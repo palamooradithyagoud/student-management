@@ -1,9 +1,10 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: Optional[str] = None
+    password: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str
@@ -15,8 +16,9 @@ class UserResponse(BaseModel):
     role: str
     department: str
     is_active: bool
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     model_config = {
         "from_attributes": True
     }
+

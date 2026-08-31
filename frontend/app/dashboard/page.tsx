@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import api from '@/lib/api';
-import { getAuthToken } from '@/lib/auth';
 import { 
   Calendar as CalendarIcon, 
   ChevronRight,
@@ -74,13 +73,9 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) {
-      router.replace('/login');
-      return;
-    }
     fetchDashboardData();
-  }, [router]);
+  }, []);
+
 
   const rawSubjectCards = data?.subject_cards && data.subject_cards.length > 0 ? data.subject_cards : [
     {

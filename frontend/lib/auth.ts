@@ -7,38 +7,28 @@ export interface UserProfile {
   created_at: string;
 }
 
-export const setAuthSession = (token: string, user: any) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('csm_hod_token', token);
-    localStorage.setItem('csm_hod_user', JSON.stringify(user));
-  }
+export const DEFAULT_HOD_USER: UserProfile = {
+  id: 1,
+  username: 'hod.csm',
+  role: 'HOD',
+  department: 'CSM',
+  is_active: true,
+  created_at: '2026-01-01T00:00:00Z',
+};
+
+export const setAuthSession = (_token?: string, _user?: any) => {
+  // Authentication disabled; session is active by default
 };
 
 export const getAuthToken = (): string | null => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('csm_hod_token');
-  }
-  return null;
+  return 'open_access_token';
 };
 
-export const getAuthUser = (): UserProfile | null => {
-  if (typeof window !== 'undefined') {
-    const raw = localStorage.getItem('csm_hod_user');
-    if (raw) {
-      try {
-        return JSON.parse(raw);
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
+export const getAuthUser = (): UserProfile => {
+  return DEFAULT_HOD_USER;
 };
 
 export const clearAuthSession = () => {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('csm_hod_token');
-    localStorage.removeItem('csm_hod_user');
-    window.location.href = '/login';
-  }
+  // Authentication disabled
 };
+

@@ -12,20 +12,13 @@ def test_hod_valid_login(client):
     assert "access_token" in data
     assert data["token_type"] == "bearer"
 
-def test_login_invalid_password(client):
-    response = client.post("/api/auth/login", json={
-        "username": "hod.csm",
-        "password": "wrong_password_123"
-    })
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert "detail" in response.json()
-
-def test_login_invalid_username(client):
-    response = client.post("/api/auth/login", json={
-        "username": "admin.cse",
-        "password": "hod_csm_secure_2026"
-    })
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+def test_open_login_endpoint(client):
+    """Verify login works without requiring specific credentials."""
+    response = client.post("/api/auth/login", json={})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
 
 def test_existing_bcrypt_password_hash_verification():
     """Verify that existing legacy bcrypt hashes ($2b$ and $2a$) remain 100% verifiable."""
@@ -39,39 +32,40 @@ def test_existing_bcrypt_password_hash_verification():
     assert verify_password("test_password_xyz_2026", new_hash) is True
     assert verify_password("wrong_password", new_hash) is False
 
-def test_password_longer_than_72_bytes_handling(client):
-    """Verify that passwords > 72 bytes do NOT crash with HTTP 500 / ValueError and return HTTP 401."""
+def test_password_longer_than_72_bytes_handling():
+    """Verify that passwords > 72 bytes do NOT crash with ValueError."""
     long_password = "a" * 150
-    # Direct security function verification
     legacy_hash = "$2b$12$e1MKzOt7Atd3jAhbSLDxheaIaeYO4dAUDh7.Y2KkOAlb9DUa5uo.W"
     assert verify_password(long_password, legacy_hash) is False
 
-    # API endpoint verification
-    response = client.post("/api/auth/login", json={
-        "username": "hod.csm",
-        "password": long_password
-    })
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-def test_protected_endpoint_without_token(client):
+def test_open_access_endpoint_without_token(client):
     response = client.get("/api/dashboard/overview")
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.status_code == status.HTTP_200_OK
 
-def test_protected_endpoint_with_invalid_token(client):
+def test_open_access_endpoint_with_arbitrary_token(client):
     response = client.get(
         "/api/dashboard/overview",
         headers={"Authorization": "Bearer invalid_fake_token_xyz"}
     )
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.status_code == status.HTTP_200_OK
 
-def test_protected_endpoint_with_valid_jwt(client, auth_headers):
+def test_open_access_endpoint_with_valid_jwt(client, auth_headers):
     response = client.get("/api/dashboard/overview", headers=auth_headers)
     assert response.status_code == status.HTTP_200_OK
 
-def test_get_current_hod_profile(client, auth_headers):
+def test_get_current_hod_profile_without_headers(client):
+    response = client.get("/api/auth/me")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["username"] == "hod.csm"
+    assert data["role"] == "HOD"
+    assert data["department"] == "CSM"
+
+def test_get_current_hod_profile_with_headers(client, auth_headers):
     response = client.get("/api/auth/me", headers=auth_headers)
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["username"] == "hod.csm"
     assert data["role"] == "HOD"
     assert data["department"] == "CSM"
+

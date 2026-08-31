@@ -5,12 +5,9 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutGrid, 
   Trophy, 
-  BookOpen,
-  LogOut,
-  ShieldCheck
+  BookOpen
 } from 'lucide-react';
 import CSMLogo from '@/components/CSMLogo';
-import { clearAuthSession } from '@/lib/auth';
 
 const NAV_ITEMS = [
   {
@@ -104,14 +101,6 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <button
-          onClick={() => clearAuthSession()}
-          className="flex items-center space-x-2 text-xs font-semibold text-slate-400 hover:text-rose-600 hover:bg-rose-50/50 px-3 py-2 rounded-xl transition-all duration-200 cursor-pointer w-full text-left active:scale-97"
-        >
-          <LogOut className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
-          <span>Sign Out</span>
-        </button>
-
         <p className="text-[10px] text-slate-400 font-normal px-2">
           © 2026 CSM • VCE College
         </p>
@@ -119,3 +108,4 @@ export default function Sidebar() {
     </aside>
   );
 }
+
