@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'All' | 'Sem 1' | 'Sem 2'>('All');
   const [topperSectionFilter, setTopperSectionFilter] = useState<string>('ALL');
+  const [passMetric, setPassMetric] = useState<'all_clear' | 'exam_pass'>('all_clear');
   const router = useRouter();
 
   const fetchDashboardData = async () => {
@@ -132,15 +133,26 @@ export default function DashboardPage() {
     ? rawSubjectCards
     : rawSubjectCards.filter((c: any) => activeFilter === `Sem ${c.semester}`);
 
-  // 6 Section-Wise Pass Percentage Bars
+  // 6 Section-Wise Pass / All-Clear Percentage Bars
   const sectionBars = data?.section_pass_rates && data.section_pass_rates.length > 0 ? data.section_pass_rates : [
-    { label: 'Sem 1 CSM A', short_label: '1-CSM-A', pass_rate: 93.7, student_count: 65, avg_sgpa: 7.42, highlight: false },
-    { label: 'Sem 2 CSM A', short_label: '2-CSM-A', pass_rate: 93.8, student_count: 65, avg_sgpa: 7.13, highlight: false },
-    { label: 'Sem 1 CSM B', short_label: '1-CSM-B', pass_rate: 95.9, student_count: 64, avg_sgpa: 7.71, highlight: false },
-    { label: 'Sem 2 CSM B', short_label: '2-CSM-B', pass_rate: 96.0, student_count: 63, avg_sgpa: 7.50, highlight: true },
-    { label: 'Sem 1 CSM C', short_label: '1-CSM-C', pass_rate: 93.6, student_count: 64, avg_sgpa: 7.58, highlight: false },
-    { label: 'Sem 2 CSM C', short_label: '2-CSM-C', pass_rate: 95.9, student_count: 64, avg_sgpa: 7.58, highlight: false },
+    { label: 'Sem 1 CSM A', short_label: '1-CSM-A', pass_rate: 93.7, student_pass_rate: 76.9, student_count: 65, avg_sgpa: 7.42, highlight: false },
+    { label: 'Sem 2 CSM A', short_label: '2-CSM-A', pass_rate: 93.8, student_pass_rate: 76.9, student_count: 65, avg_sgpa: 7.13, highlight: false },
+    { label: 'Sem 1 CSM B', short_label: '1-CSM-B', pass_rate: 95.9, student_pass_rate: 82.8, student_count: 64, avg_sgpa: 7.71, highlight: false },
+    { label: 'Sem 2 CSM B', short_label: '2-CSM-B', pass_rate: 96.0, student_pass_rate: 81.0, student_count: 63, avg_sgpa: 7.50, highlight: false },
+    { label: 'Sem 1 CSM C', short_label: '1-CSM-C', pass_rate: 93.6, student_pass_rate: 76.6, student_count: 64, avg_sgpa: 7.58, highlight: false },
+    { label: 'Sem 2 CSM C', short_label: '2-CSM-C', pass_rate: 95.9, student_pass_rate: 82.8, student_count: 64, avg_sgpa: 7.58, highlight: false },
   ];
+
+  const maxMetricVal = Math.max(
+    ...sectionBars.map((b: any) => passMetric === 'all_clear' ? (b.student_pass_rate ?? b.pass_rate) : b.pass_rate)
+  );
+
+  const avgDeptRate = (
+    sectionBars.reduce(
+      (acc: number, b: any) => acc + (passMetric === 'all_clear' ? (b.student_pass_rate ?? b.pass_rate) : b.pass_rate),
+      0
+    ) / (sectionBars.length || 1)
+  ).toFixed(1);
 
   // Real Top 5 Academic Toppers
   const toppers = data?.toppers && data.toppers.length > 0 ? data.toppers : [
@@ -279,20 +291,45 @@ export default function DashboardPage() {
 
         {/* Bottom 2-Column Section: Section-Wise Pass Percentage + Top 5 Academic Toppers */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
-          {/* Left Column: Section-Wise Pass Percentage (6 Bars for Sem 1 & Sem 2 across A, B, C) */}
+          {/* Left Column: Section-Wise All-Clear / Pass Percentage */}
           <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-100 p-6 shadow-sm flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    Section-Wise Pass Percentage
+                    {passMetric === 'all_clear' ? 'Section-Wise All-Clear Rate (0 Backlogs)' : 'Section-Wise Pass Percentage'}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Semester 1 & 2 Examination Pass Rates across Sections A, B & C
+                    {passMetric === 'all_clear'
+                      ? 'Semester 1 & 2 Students with 0 Backlogs across Sections A, B & C'
+                      : 'Semester 1 & 2 Examination Pass Rates across Sections A, B & C'}
                   </p>
                 </div>
-                <div className="p-1.5 bg-slate-50 rounded-xl text-slate-400">
-                  <Award className="w-4 h-4 text-amber-500" />
+                
+                {/* Metric Toggle: All-Clear (0 Backlogs) vs Exam Pass Rate */}
+                <div className="flex items-center space-x-1 bg-slate-100/90 p-1 rounded-full text-xs font-semibold self-start sm:self-auto shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setPassMetric('all_clear')}
+                    className={`px-3 py-1 rounded-full transition-all cursor-pointer text-xs ${
+                      passMetric === 'all_clear'
+                        ? 'bg-slate-900 text-white font-bold shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900 font-medium'
+                    }`}
+                  >
+                    All-Clear (0 Backlogs)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPassMetric('exam_pass')}
+                    className={`px-3 py-1 rounded-full transition-all cursor-pointer text-xs ${
+                      passMetric === 'exam_pass'
+                        ? 'bg-slate-900 text-white font-bold shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900 font-medium'
+                    }`}
+                  >
+                    Exam Pass Rate
+                  </button>
                 </div>
               </div>
 
@@ -301,15 +338,15 @@ export default function DashboardPage() {
                   6 Sections Tracked
                 </span>
                 <span className="bg-[#ecfdf5] text-[#10b981] text-xs font-bold px-2.5 py-0.5 rounded-full ml-auto">
-                  94.9% Avg Dept Pass Rate
+                  {avgDeptRate}% {passMetric === 'all_clear' ? 'Avg Dept All-Clear Rate' : 'Avg Dept Pass Rate'}
                 </span>
               </div>
 
-              {/* Bar Chart (Rendering the 6 Section-Wise Pass Percentage Bars) */}
+              {/* Bar Chart (Rendering the 6 Section-Wise Bars) */}
               <div className="mt-7">
                 <div className="h-44 flex items-end justify-between gap-4 px-2 border-b border-slate-100 pb-3 relative">
                   {/* Left Y-axis labels */}
-                  <div className="absolute -left-2 top-0 bottom-3 flex flex-col justify-between text-[10px] text-slate-400 font-mono">
+                  <div className="absolute -left-2 top-0 bottom-3 flex flex-col justify-between text-[10px] text-slate-400 font-mono pointer-events-none">
                     <span>100%</span>
                     <span>80%</span>
                     <span>60%</span>
@@ -322,22 +359,38 @@ export default function DashboardPage() {
                   <div className="w-6 shrink-0" />
 
                   {sectionBars.map((bar: any) => {
-                    const heightPercent = Math.min(100, Math.max(20, bar.pass_rate));
-                    const isHighlighted = bar.highlight;
+                    const currentVal = passMetric === 'all_clear' ? (bar.student_pass_rate ?? bar.pass_rate) : bar.pass_rate;
+                    const isTop = currentVal === maxMetricVal;
 
                     return (
-                      <div key={bar.short_label} className="flex-1 flex flex-col items-center group">
-                        <div
-                          className={`w-full max-w-[46px] rounded-xl transition-all relative ${
-                            isHighlighted
-                              ? 'bg-[#fed7aa] shadow-xs ring-1 ring-[#f97316]'
-                              : 'bg-slate-100/90 group-hover:bg-slate-200'
-                          }`}
-                          style={{ height: `${heightPercent * 1.55}px` }}
-                        >
-                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[9px] py-1 px-2 rounded-lg pointer-events-none transition-opacity whitespace-nowrap z-20 font-bold shadow-lg text-center">
-                            <div>{bar.label}: {bar.pass_rate}%</div>
-                            <div className="text-[8px] text-slate-300 font-normal">{bar.student_count} Students • SGPA {bar.avg_sgpa}</div>
+                      <div key={bar.short_label} className="flex-1 flex flex-col items-center h-full group relative">
+                        {/* 100% Height Track with colored fill rising from bottom to exact pass percentage */}
+                        <div className="w-full max-w-[44px] h-full bg-slate-100/80 rounded-2xl flex flex-col justify-end p-1 relative border border-slate-200/50 group-hover:border-slate-300 transition-colors shadow-2xs">
+                          {/* Inner Color Fill: Fills only up to the exact pass percentage */}
+                          <div
+                            className={`w-full rounded-xl transition-all duration-700 ease-out relative ${
+                              passMetric === 'all_clear'
+                                ? isTop
+                                  ? 'bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-xs'
+                                  : 'bg-gradient-to-t from-teal-500 to-emerald-400 shadow-2xs'
+                                : isTop
+                                  ? 'bg-gradient-to-t from-indigo-600 to-indigo-400 shadow-xs'
+                                  : 'bg-gradient-to-t from-sky-500 to-indigo-400 shadow-2xs'
+                            }`}
+                            style={{ height: `${Math.min(100, Math.max(8, currentVal))}%` }}
+                          >
+                            {/* Subtle top highlight cap */}
+                            <div className="w-full h-1 bg-white/40 rounded-t-xl" />
+                          </div>
+
+                          {/* Hover Tooltip */}
+                          <div className="absolute -top-11 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[9px] py-1.5 px-2.5 rounded-lg pointer-events-none transition-opacity whitespace-nowrap z-30 font-bold shadow-xl text-center">
+                            <div>{bar.label}: {currentVal}% {passMetric === 'all_clear' ? '(0 Backlogs)' : ''}</div>
+                            <div className="text-[8px] text-slate-300 font-normal mt-0.5">
+                              {passMetric === 'all_clear'
+                                ? `Exam Pass Rate: ${bar.pass_rate}% • ${bar.student_count} Students`
+                                : `All-Clear: ${bar.student_pass_rate ?? '—'}% • ${bar.student_count} Students`}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -347,17 +400,31 @@ export default function DashboardPage() {
 
                 {/* 6 Section Labels underneath bars */}
                 <div className="flex justify-between text-[10px] font-bold text-slate-500 mt-2.5 px-2 pl-8">
-                  {sectionBars.map((bar: any) => (
-                    <div
-                      key={bar.short_label}
-                      className={`flex-1 text-center font-mono ${
-                        bar.highlight ? 'text-slate-900 font-extrabold text-[11px]' : ''
-                      }`}
-                    >
-                      <span className="block">{bar.short_label}</span>
-                      <span className="text-[9px] text-slate-400 font-sans font-normal">{bar.pass_rate}%</span>
-                    </div>
-                  ))}
+                  {sectionBars.map((bar: any) => {
+                    const currentVal = passMetric === 'all_clear' ? (bar.student_pass_rate ?? bar.pass_rate) : bar.pass_rate;
+                    const isHighlighted = currentVal === maxMetricVal;
+
+                    return (
+                      <div
+                        key={bar.short_label}
+                        className={`flex-1 text-center font-mono ${
+                          isHighlighted ? 'text-slate-900 font-extrabold text-[11px]' : ''
+                        }`}
+                      >
+                        <span className="block">{bar.short_label}</span>
+                        <span className={`text-[10px] font-bold font-mono ${
+                          passMetric === 'all_clear' ? 'text-emerald-700' : 'text-slate-500'
+                        }`}>
+                          {currentVal}%
+                        </span>
+                        {passMetric === 'all_clear' && (
+                          <span className="text-[8px] text-slate-400 font-sans block font-normal -mt-0.5">
+                            0 backlog
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

@@ -19,6 +19,7 @@ class StudentRead(StudentBase):
     sem2_sgpa: Optional[float] = None
     sem1_back: Optional[int] = 0
     sem2_back: Optional[int] = 0
+    total_backlogs: Optional[int] = 0
     overall_sgpa: Optional[float] = None
     rank: Optional[int] = None
 

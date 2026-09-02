@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import api from '@/lib/api';
 import {
@@ -22,6 +23,9 @@ import {
   ShieldAlert,
   GraduationCap,
   Clock,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 
@@ -423,46 +427,153 @@ function StudentModal({ student, onClose }: { student: any; onClose: () => void 
 }
 
 function StudentsContent() {
+  const searchParams = useSearchParams();
+
   const [students, setStudents] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [section, setSection] = useState('');
+  const [sortBy, setSortBy] = useState<string>('overall_sgpa');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [backlogFilter, setBacklogFilter] = useState<'all' | 'with_backlogs' | 'no_backlogs'>('all');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize query parameters on client mount
+  // Read initial query params from window.location and searchParams on client mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      const q = urlParams.get('search');
-      const sec = urlParams.get('section');
-      if (q) setSearch(q);
-      if (sec) setSection(sec);
+      const q = urlParams.get('search') || searchParams?.get('search') || '';
+      const sec = urlParams.get('section') || searchParams?.get('section') || '';
+      setSearch(q);
+      setDebouncedSearch(q);
+      setSection(sec);
+      setIsInitialized(true);
     }
+  }, [searchParams]);
+
+  // Listen for browser navigation (back/forward)
+  useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const q = urlParams.get('search') || '';
+        const sec = urlParams.get('section') || '';
+        setSearch(q);
+        setDebouncedSearch(q);
+        setSection(sec);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const fetchStudents = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (search.trim()) params.append('search', search.trim());
-      if (section) params.append('section', section);
-      params.append('limit', '300');
+  // Debounce user typing: only update URL and debounced search AFTER user actively types
+  useEffect(() => {
+    if (!isInitialized) return;
 
-      const res = await api.get(`/api/students?${params.toString()}`);
-      setStudents(res.data.items || []);
-      setTotal(res.data.total || 0);
-    } catch (err) {
-      console.error('Failed to load leaderboard:', err);
-    } finally {
-      setLoading(false);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      if (typeof window !== 'undefined') {
+        const currentUrl = new URL(window.location.href);
+        const currentParam = currentUrl.searchParams.get('search') || '';
+        if (search.trim() !== currentParam) {
+          if (search.trim()) {
+            currentUrl.searchParams.set('search', search.trim());
+          } else {
+            currentUrl.searchParams.delete('search');
+          }
+          window.history.replaceState({}, '', currentUrl.toString());
+        }
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [search, isInitialized]);
+
+  // Fetch students: only fires when initialized, and cancels in-flight stale requests
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const controller = new AbortController();
+    let isCancelled = false;
+
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (debouncedSearch.trim()) params.append('search', debouncedSearch.trim());
+        if (section) params.append('section', section);
+        if (sortBy) params.append('sort_by', sortBy);
+        if (sortOrder) params.append('order', sortOrder);
+        if (backlogFilter !== 'all') params.append('backlog_filter', backlogFilter);
+        params.append('limit', '300');
+
+        const res = await api.get(`/api/students?${params.toString()}`, {
+          signal: controller.signal,
+        });
+
+        if (!isCancelled) {
+          setStudents(res.data.items || []);
+          setTotal(res.data.total || 0);
+        }
+      } catch (err: any) {
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') {
+          return;
+        }
+        if (!isCancelled) {
+          console.error('Failed to load leaderboard:', err);
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isCancelled = true;
+      controller.abort();
+    };
+  }, [isInitialized, section, debouncedSearch, sortBy, sortOrder, backlogFilter, refreshCount]);
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortOrder(field.includes('back') ? 'asc' : 'desc');
     }
   };
 
-  useEffect(() => {
-    fetchStudents();
-  }, [section, search]);
+  const handleSectionChange = (newSec: string) => {
+    setSection(newSec);
+    if (typeof window !== 'undefined') {
+      const currentUrl = new URL(window.location.href);
+      if (newSec) {
+        currentUrl.searchParams.set('section', newSec);
+      } else {
+        currentUrl.searchParams.delete('section');
+      }
+      window.history.replaceState({}, '', currentUrl.toString());
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearch('');
+    setDebouncedSearch('');
+    if (typeof window !== 'undefined') {
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.delete('search');
+      window.history.replaceState({}, '', currentUrl.toString());
+    }
+  };
 
   const viewStudentDetails = async (rollNo: string) => {
     if (loadingDetail) return;
@@ -480,10 +591,11 @@ function StudentsContent() {
     }
   };
 
-  const top3 = !search && !section ? students.slice(0, 3) : [];
+  const top3 = !debouncedSearch && !section && sortBy === 'overall_sgpa' && backlogFilter === 'all' ? students.slice(0, 3) : [];
+  const isSearching = search !== debouncedSearch || (loading && debouncedSearch.trim() !== '');
 
   return (
-    <AppShell onSearch={(q) => setSearch(q)}>
+    <AppShell>
       <div className="space-y-6 animate-fade-in">
         {/* Header & Section Filter Tabs */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
@@ -503,7 +615,7 @@ function StudentsContent() {
           <div className="flex items-center space-x-2">
             <div className="flex items-center space-x-1 bg-slate-100/90 p-1 rounded-full text-xs font-semibold">
               {[
-                { label: 'All Sections (193)', val: '' },
+                { label: 'All Sections', val: '' },
                 { label: 'Section A (65)', val: 'A' },
                 { label: 'Section B (64)', val: 'B' },
                 { label: 'Section C (64)', val: 'C' },
@@ -511,7 +623,8 @@ function StudentsContent() {
                 <button
                   key={sec.val}
                   type="button"
-                  onClick={() => setSection(sec.val)}
+                  suppressHydrationWarning
+                  onClick={() => handleSectionChange(sec.val)}
                   className={`px-3 py-1.5 rounded-full transition-all cursor-pointer text-xs ${
                     section === sec.val
                       ? 'bg-slate-900 text-white font-bold shadow-xs'
@@ -524,7 +637,9 @@ function StudentsContent() {
             </div>
 
             <button
-              onClick={fetchStudents}
+              type="button"
+              suppressHydrationWarning
+              onClick={() => setRefreshCount((c) => c + 1)}
               className="p-2 text-slate-400 hover:text-slate-800 rounded-full cursor-pointer transition-colors"
               title="Refresh Leaderboard"
             >
@@ -622,14 +737,20 @@ function StudentsContent() {
           </div>
         )}
 
-        {/* Search Input Bar */}
-        <div className="flex items-center gap-3">
+        {/* Controls: Search Bar & Sort/Filter Toolbar */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Search Input Bar */}
           <div className="relative flex-1 max-w-md group">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-slate-900 transition-colors duration-200">
-              <Search className="w-4 h-4" />
+              {isSearching ? (
+                <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
+              ) : (
+                <Search className="w-4 h-4" />
+              )}
             </div>
             <input
               type="text"
+              suppressHydrationWarning
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search student name or roll number (e.g. 25881A6693)..."
@@ -637,43 +758,196 @@ function StudentsContent() {
             />
             {search && (
               <button
-                onClick={() => setSearch('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-700 transition-colors"
+                type="button"
+                suppressHydrationWarning
+                onClick={handleClearSearch}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                title="Clear search"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {search && (
-            <span className="text-xs text-slate-500 font-medium">
-              Showing {students.length} matching students
-            </span>
-          )}
+          {/* Sort & Backlog Filter Toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Backlog Filters */}
+            <div className="flex items-center space-x-1 bg-slate-100/90 p-1 rounded-full text-xs font-semibold shadow-2xs">
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => setBacklogFilter('all')}
+                className={`px-3 py-1 rounded-full transition-all text-xs cursor-pointer ${
+                  backlogFilter === 'all'
+                    ? 'bg-slate-900 text-white font-bold shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 font-medium'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => {
+                  setBacklogFilter('with_backlogs');
+                  setSortBy('total_backlogs');
+                  setSortOrder('asc');
+                }}
+                className={`px-3 py-1 rounded-full transition-all text-xs cursor-pointer flex items-center gap-1 ${
+                  backlogFilter === 'with_backlogs'
+                    ? 'bg-rose-600 text-white font-bold shadow-xs'
+                    : 'text-rose-700 hover:text-rose-900 font-medium hover:bg-rose-50'
+                }`}
+              >
+                <span>With Backlogs (1 to 10+)</span>
+              </button>
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => setBacklogFilter('no_backlogs')}
+                className={`px-3 py-1 rounded-full transition-all text-xs cursor-pointer ${
+                  backlogFilter === 'no_backlogs'
+                    ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                    : 'text-emerald-700 hover:text-emerald-900 font-medium hover:bg-emerald-50'
+                }`}
+              >
+                0 Backlogs
+              </button>
+            </div>
+
+            {/* Sort Options */}
+            <div className="flex items-center space-x-1 bg-slate-100/90 p-1 rounded-full text-xs font-semibold shadow-2xs">
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => { setSortBy('overall_sgpa'); setSortOrder('desc'); }}
+                className={`px-3 py-1 rounded-full transition-all text-xs cursor-pointer ${
+                  sortBy === 'overall_sgpa'
+                    ? 'bg-slate-900 text-white font-bold shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 font-medium'
+                }`}
+              >
+                Rank / SGPA
+              </button>
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => { setSortBy('total_backlogs'); setSortOrder('asc'); }}
+                className={`px-3 py-1 rounded-full transition-all text-xs cursor-pointer flex items-center gap-1 ${
+                  sortBy === 'total_backlogs' && sortOrder === 'asc'
+                    ? 'bg-amber-600 text-white font-bold shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 font-medium'
+                }`}
+                title="Sort ascending from 1 backlog to 10 backlogs"
+              >
+                <span>Backlogs: 1 → 10+</span>
+              </button>
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => { setSortBy('total_backlogs'); setSortOrder('desc'); }}
+                className={`px-3 py-1 rounded-full transition-all text-xs cursor-pointer flex items-center gap-1 ${
+                  sortBy === 'total_backlogs' && sortOrder === 'desc'
+                    ? 'bg-rose-700 text-white font-bold shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 font-medium'
+                }`}
+                title="Sort descending: highest backlogs first"
+              >
+                <span>10+ → 1</span>
+              </button>
+            </div>
+          </div>
         </div>
+
+        {debouncedSearch && (
+          <div className="text-xs text-slate-500 font-medium -mt-2">
+            Showing {students.length} matching students
+          </div>
+        )}
 
         {/* Main Leaderboard Table */}
         <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-100 text-slate-400 font-bold">
-                  <th className="py-3 px-3 w-16 text-center">Rank</th>
-                  <th className="py-3 px-3">Student Name</th>
-                  <th className="py-3 px-3">Roll Number</th>
+                <tr className="border-b border-slate-100 text-slate-400 font-bold select-none">
+                  <th
+                    className="py-3 px-3 w-16 text-center cursor-pointer hover:text-slate-900 transition-colors"
+                    onClick={() => handleSort('rank')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Rank
+                      {sortBy === 'rank' && (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-900" /> : <ArrowDown className="w-3 h-3 text-slate-900" />)}
+                    </span>
+                  </th>
+                  <th
+                    className="py-3 px-3 cursor-pointer hover:text-slate-900 transition-colors"
+                    onClick={() => handleSort('name')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Student Name
+                      {sortBy === 'name' && (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-900" /> : <ArrowDown className="w-3 h-3 text-slate-900" />)}
+                    </span>
+                  </th>
+                  <th
+                    className="py-3 px-3 cursor-pointer hover:text-slate-900 transition-colors"
+                    onClick={() => handleSort('roll_no')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Roll Number
+                      {sortBy === 'roll_no' && (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-900" /> : <ArrowDown className="w-3 h-3 text-slate-900" />)}
+                    </span>
+                  </th>
                   <th className="py-3 px-3 text-center">Sec</th>
                   <th className="py-3 px-3 text-center">Sem 1 CGPA</th>
                   <th className="py-3 px-3 text-center">Sem 2 CGPA</th>
-                  <th className="py-3 px-3 text-center">Sem 1 Back</th>
-                  <th className="py-3 px-3 text-center">Sem 2 Back</th>
-                  <th className="py-3 px-3 text-center">Overall SGPA</th>
+                  <th
+                    className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 transition-colors"
+                    onClick={() => handleSort('sem1_back')}
+                  >
+                    <span className="inline-flex items-center gap-1 justify-center">
+                      Sem 1 Back
+                      {sortBy === 'sem1_back' && (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-amber-600" /> : <ArrowDown className="w-3 h-3 text-amber-600" />)}
+                    </span>
+                  </th>
+                  <th
+                    className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 transition-colors"
+                    onClick={() => handleSort('sem2_back')}
+                  >
+                    <span className="inline-flex items-center gap-1 justify-center">
+                      Sem 2 Back
+                      {sortBy === 'sem2_back' && (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-amber-600" /> : <ArrowDown className="w-3 h-3 text-amber-600" />)}
+                    </span>
+                  </th>
+                  <th
+                    className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 transition-colors bg-slate-50/70 rounded-lg"
+                    onClick={() => handleSort('total_backlogs')}
+                  >
+                    <span className="inline-flex items-center gap-1 justify-center font-extrabold text-slate-800">
+                      Total Backlogs
+                      {sortBy === 'total_backlogs' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-amber-600" /> : <ArrowDown className="w-3.5 h-3.5 text-rose-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                      )}
+                    </span>
+                  </th>
+                  <th
+                    className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 transition-colors"
+                    onClick={() => handleSort('overall_sgpa')}
+                  >
+                    <span className="inline-flex items-center gap-1 justify-center">
+                      Overall SGPA
+                      {sortBy === 'overall_sgpa' && (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-900" /> : <ArrowDown className="w-3 h-3 text-slate-900" />)}
+                    </span>
+                  </th>
                   <th className="py-3 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {loading ? (
+                {loading && students.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-slate-400">
+                    <td colSpan={11} className="py-12 text-center text-slate-400">
                       <div className="flex items-center justify-center space-x-2">
                         <RefreshCw className="w-4 h-4 animate-spin text-slate-400" />
                         <span>Loading Leaderboard Rankings...</span>
@@ -769,6 +1043,23 @@ function StudentsContent() {
                           )}
                         </td>
 
+                        {/* Total Backlogs Column */}
+                        <td className="py-3 px-3 text-center bg-slate-50/40">
+                          {(s.total_backlogs ?? (s.sem1_back + s.sem2_back)) > 0 ? (
+                            <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full font-extrabold text-[11px] ${
+                              (s.total_backlogs ?? (s.sem1_back + s.sem2_back)) >= 3
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs'
+                            }`}>
+                              {s.total_backlogs ?? (s.sem1_back + s.sem2_back)} {(s.total_backlogs ?? (s.sem1_back + s.sem2_back)) === 1 ? 'Backlog' : 'Backlogs'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full font-bold text-[10px]">
+                              0
+                            </span>
+                          )}
+                        </td>
+
                         {/* Overall SGPA */}
                         <td className="py-3 px-3 text-center">
                           {s.overall_sgpa !== null && s.overall_sgpa !== undefined ? (
@@ -805,8 +1096,10 @@ function StudentsContent() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-slate-400">
-                      No students found matching current filter.
+                    <td colSpan={11} className="py-12 text-center text-slate-400">
+                      {debouncedSearch
+                        ? `No students found matching "${debouncedSearch}".`
+                        : 'No students found for this section or filter.'}
                     </td>
                   </tr>
                 )}

@@ -15,7 +15,7 @@ export default function AppShell({ children }: AppShellProps) {
       <Sidebar />
 
       {/* Full-screen Main Content Area */}
-      <main className="flex-1 min-h-screen p-6 lg:p-8 flex flex-col overflow-y-auto bg-white">
+      <main className="flex-1 min-h-screen p-6 lg:p-8 flex flex-col overflow-y-auto bg-white" suppressHydrationWarning>
         <div className="max-w-7xl w-full mx-auto flex-1 flex flex-col">
           <div className="flex-1">
             {children}

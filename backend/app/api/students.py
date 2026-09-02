@@ -16,8 +16,9 @@ router = APIRouter(prefix="/api/students", tags=["Students"])
 def list_students(
     search: Optional[str] = None,
     section: Optional[str] = None,
-    sort_by: Optional[str] = Query("overall_sgpa", description="Field to sort by (e.g. overall_sgpa, rank, roll_no, name)"),
+    sort_by: Optional[str] = Query("overall_sgpa", description="Field to sort by (e.g. overall_sgpa, total_backlogs, sem1_back, sem2_back, rank, roll_no, name)"),
     order: Optional[str] = Query("desc", description="Sort order: asc or desc"),
+    backlog_filter: Optional[str] = Query(None, description="Filter: all, with_backlogs, no_backlogs, 1_to_10"),
     limit: int = Query(300, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_hod),
@@ -25,7 +26,7 @@ def list_students(
 ):
     """
     Retrieve leaderboard ranking list of students in CSM department arranged top to bottom
-    with student name, roll number, section, sem 1 sgpa/cgpa, sem 2 sgpa/cgpa, sem 1 backlogs, sem 2 backlogs, and overall sgpa.
+    with student name, roll number, section, sem 1 sgpa/cgpa, sem 2 sgpa/cgpa, sem 1 backlogs, sem 2 backlogs, total backlogs, and overall sgpa.
     """
     students_csv = settings.DATA_PROCESSED_DIR / "students.csv"
     if not students_csv.exists():
@@ -95,6 +96,8 @@ def list_students(
         else:
             overall_sgpa = None
 
+        total_back = (s1_back or 0) + (s2_back or 0)
+
         all_students_data.append({
             "id": int(r.name) + 1,
             "student_id": str(r.get("student_id", f"STU_{roll}")),
@@ -111,6 +114,7 @@ def list_students(
             "sem2_sgpa": s2_sgpa,
             "sem1_back": s1_back,
             "sem2_back": s2_back,
+            "total_backlogs": total_back,
             "overall_sgpa": overall_sgpa,
         })
 
@@ -119,7 +123,7 @@ def list_students(
         key=lambda x: (
             1 if x["overall_sgpa"] is not None else 0,
             x["overall_sgpa"] or 0.0,
-            -(x["sem1_back"] + x["sem2_back"])
+            -(x.get("total_backlogs") or 0)
         ),
         reverse=True
     )
@@ -140,6 +144,58 @@ def list_students(
             if (s["roll_no"] and search_lower in str(s["roll_no"]).lower()) or
                (s["student_name"] and search_lower in str(s["student_name"]).lower())
         ]
+
+    if backlog_filter in ["with_backlogs", "1_to_10", "has_backlogs"]:
+        filtered_students = [s for s in filtered_students if (s.get("total_backlogs") or 0) > 0]
+    elif backlog_filter == "no_backlogs":
+        filtered_students = [s for s in filtered_students if (s.get("total_backlogs") or 0) == 0]
+
+    # Apply Sorting
+    is_desc = (order or "desc").lower() == "desc"
+
+    if sort_by in ["total_backlogs", "backlogs", "backlog"]:
+        if is_desc:
+            filtered_students.sort(
+                key=lambda x: (
+                    x.get("total_backlogs") or 0,
+                    -(x.get("overall_sgpa") or 0.0)
+                ),
+                reverse=True
+            )
+        else:
+            # 1 to 10+ backlogs ascending: students with backlogs (1..10+) first, then 0 backlogs
+            filtered_students.sort(
+                key=lambda x: (
+                    0 if (x.get("total_backlogs") or 0) > 0 else 1,
+                    x.get("total_backlogs") or 0,
+                    -(x.get("overall_sgpa") or 0.0)
+                )
+            )
+    elif sort_by in ["sem1_back", "sem1_backlogs"]:
+        if is_desc:
+            filtered_students.sort(key=lambda x: (x.get("sem1_back") or 0, -(x.get("overall_sgpa") or 0.0)), reverse=True)
+        else:
+            filtered_students.sort(key=lambda x: (0 if (x.get("sem1_back") or 0) > 0 else 1, x.get("sem1_back") or 0, -(x.get("overall_sgpa") or 0.0)))
+    elif sort_by in ["sem2_back", "sem2_backlogs"]:
+        if is_desc:
+            filtered_students.sort(key=lambda x: (x.get("sem2_back") or 0, -(x.get("overall_sgpa") or 0.0)), reverse=True)
+        else:
+            filtered_students.sort(key=lambda x: (0 if (x.get("sem2_back") or 0) > 0 else 1, x.get("sem2_back") or 0, -(x.get("overall_sgpa") or 0.0)))
+    elif sort_by in ["name", "student_name"]:
+        filtered_students.sort(key=lambda x: (x.get("student_name") or "").lower(), reverse=is_desc)
+    elif sort_by in ["roll_no", "roll"]:
+        filtered_students.sort(key=lambda x: (x.get("roll_no") or "").lower(), reverse=is_desc)
+    elif sort_by == "rank":
+        filtered_students.sort(key=lambda x: x.get("rank") or 9999, reverse=is_desc)
+    elif sort_by in ["overall_sgpa", "sgpa", "cgpa"]:
+        filtered_students.sort(
+            key=lambda x: (
+                1 if x["overall_sgpa"] is not None else 0,
+                x["overall_sgpa"] or 0.0,
+                -(x.get("total_backlogs") or 0)
+            ),
+            reverse=is_desc
+        )
 
     total_count = len(filtered_students)
     paged_students = filtered_students[offset:offset+limit]

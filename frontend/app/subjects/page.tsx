@@ -525,12 +525,6 @@ export default function SubjectsPage() {
     });
   }, [subjects, semFilter, searchQuery]);
 
-  const totalSubjectsCount = subjects.length;
-  const totalPassCount = subjects.reduce((acc, s) => acc + (s.total_pass || 0), 0);
-  const totalFailCount = subjects.reduce((acc, s) => acc + (s.total_fail || 0), 0);
-  const totalExams = totalPassCount + totalFailCount;
-  const overallPassPercentage = totalExams > 0 ? ((totalPassCount / totalExams) * 100).toFixed(1) : '0.0';
-
   return (
     <AppShell>
       <div className="space-y-7 animate-fade-in">
@@ -581,33 +575,6 @@ export default function SubjectsPage() {
                 </button>
               ))}
             </div>
-          </div>
-        </div>
-
-        {/* KPI Summary */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-250">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Subjects</p>
-            <p className="text-xl font-extrabold text-slate-900 mt-1">{totalSubjectsCount}</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Sem 1 & Sem 2 Combined</p>
-          </div>
-
-          <div className="bg-[#ecfccb]/60 border border-[#d9f99d] rounded-2xl p-4 shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-250">
-            <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Total Passed</p>
-            <p className="text-xl font-extrabold text-emerald-900 mt-1">{totalPassCount}</p>
-            <p className="text-[10px] text-emerald-700 mt-0.5">Student Exam Results</p>
-          </div>
-
-          <div className="bg-[#fee2e2]/60 border border-[#fecaca] rounded-2xl p-4 shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-250">
-            <p className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">Total Failed</p>
-            <p className="text-xl font-extrabold text-rose-900 mt-1">{totalFailCount}</p>
-            <p className="text-[10px] text-rose-700 mt-0.5">Backlog Records</p>
-          </div>
-
-          <div className="bg-[#e0f2fe]/60 border border-[#bae6fd] rounded-2xl p-4 shadow-xs hover:shadow-sm hover:-translate-y-0.5 transition-all duration-250">
-            <p className="text-[11px] font-bold text-sky-800 uppercase tracking-wider">Overall Pass %</p>
-            <p className="text-xl font-extrabold text-sky-900 mt-1">{overallPassPercentage}%</p>
-            <p className="text-[10px] text-sky-700 mt-0.5">Department Average</p>
           </div>
         </div>
 
