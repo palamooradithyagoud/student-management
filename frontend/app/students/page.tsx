@@ -63,10 +63,9 @@ function gradeColor(grade: string) {
 function StudentModal({ student, onClose }: { student: any; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'courses' | 'insights'>('overview');
 
-  const sem1Records = student.records?.filter((r: any) => r.semester === 1) || [];
-  const sem2Records = student.records?.filter((r: any) => r.semester === 2) || [];
-  const sem1Sum = student.semester_summaries?.find((s: any) => s.semester === 1);
-  const sem2Sum = student.semester_summaries?.find((s: any) => s.semester === 2);
+  const semesterNumbers = Array.from(
+    new Set((student.records || []).map((r: any) => r.semester))
+  ).filter(Boolean).sort((a: any, b: any) => a - b);
 
   const sectionColor =
     student.section === 'A'
@@ -205,7 +204,7 @@ function StudentModal({ student, onClose }: { student: any; onClose: () => void 
                   },
                   {
                     label: 'Overall CGPA', value: student.overall_cgpa?.toFixed(2) ?? '—',
-                    sub: 'Avg of Sem 1 & 2',
+                    sub: 'Cumulative across semesters',
                     icon: <GraduationCap className="w-4 h-4 text-emerald-500" />,
                     bg: 'bg-emerald-50 border-emerald-100', vcolor: cgpaColor(student.overall_cgpa),
                   },
@@ -314,30 +313,39 @@ function StudentModal({ student, onClose }: { student: any; onClose: () => void 
 
           {/* COURSES TAB */}
           {activeTab === 'courses' && (
-            <div className="p-6 space-y-5">
-              {sem1Records.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-black">S1</div>
-                    <h4 className="text-xs font-extrabold text-slate-900">Semester 1</h4>
-                    {sem1Sum && <span className={`ml-auto text-xs font-black ${cgpaColor(sem1Sum.sgpa)}`}>SGPA {sem1Sum.sgpa?.toFixed(2) ?? '—'}</span>}
+            <div className="p-6 space-y-6">
+              {semesterNumbers.map((semNum: any) => {
+                const semRecs = (student.records || []).filter((r: any) => r.semester === semNum);
+                const semSum = (student.semester_summaries || []).find((s: any) => s.semester === semNum);
+                if (semRecs.length === 0) return null;
+                return (
+                  <div key={semNum} className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-black">
+                        S{semNum}
+                      </div>
+                      <h4 className="text-xs font-extrabold text-slate-900">Semester {semNum}</h4>
+                      {semSum && (
+                        <div className="ml-auto flex items-center gap-2">
+                          {semSum.backlog_count !== undefined && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              semSum.backlog_count === 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {semSum.backlog_count === 0 ? 'All Clear' : `${semSum.backlog_count} Backlog(s)`}
+                            </span>
+                          )}
+                          <span className={`text-xs font-black ${cgpaColor(semSum.sgpa)}`}>
+                            SGPA {semSum.sgpa?.toFixed(2) ?? '—'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <CourseTable records={semRecs} semSum={semSum} />
                   </div>
-                  <CourseTable records={sem1Records} semSum={sem1Sum} />
-                </div>
-              )}
+                );
+              })}
 
-              {sem2Records.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-lg bg-indigo-700 text-white flex items-center justify-center text-[10px] font-black">S2</div>
-                    <h4 className="text-xs font-extrabold text-slate-900">Semester 2</h4>
-                    {sem2Sum && <span className={`ml-auto text-xs font-black ${cgpaColor(sem2Sum.sgpa)}`}>SGPA {sem2Sum.sgpa?.toFixed(2) ?? '—'}</span>}
-                  </div>
-                  <CourseTable records={sem2Records} semSum={sem2Sum} />
-                </div>
-              )}
-
-              {student.records?.length === 0 && (
+              {(!student.records || student.records.length === 0) && (
                 <div className="py-12 text-center text-slate-400 text-xs">No course records available for this student.</div>
               )}
             </div>

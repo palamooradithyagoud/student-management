@@ -24,7 +24,27 @@ def list_subjects(
 
     subs_csv = settings.DATA_PROCESSED_DIR / "subjects.csv"
     if not subs_csv.exists():
-        return SubjectListResponse(total=0, items=[], mappings=[])
+        db_subs = db.query(Subject)
+        if semester:
+            db_subs = db_subs.filter(Subject.semester == semester)
+        db_subs = db_subs.all()
+        items = [
+            SubjectRead(
+                id=s.id,
+                subject_id=s.subject_id,
+                subject_code=s.subject_code,
+                subject_name=s.subject_name,
+                semester=s.semester,
+                credits=s.credits,
+                total_students=0,
+                total_pass=0,
+                total_fail=0,
+                pass_percentage=0.0,
+                avg_attendance=None
+            )
+            for s in db_subs
+        ]
+        return SubjectListResponse(total=len(items), items=items, mappings=[])
 
     df = pd.read_csv(subs_csv).fillna("")
     if semester:
@@ -112,7 +132,7 @@ def list_subject_mappings(
 @router.get("/{subject_code}/failed-students")
 def get_failed_students(
     subject_code: str,
-    semester: int = Query(..., description="Semester number (1 or 2)"),
+    semester: int = Query(..., description="Semester number (1 to 8)"),
     current_user: User = Depends(get_current_hod)
 ):
     """

@@ -13,19 +13,19 @@ class DataValidator:
         sem1_res_students: set[str],
         sem2_res_students: set[str],
         sem1_att_students: set[str],
-        sem2_att_students: set[str]
+        sem2_att_students: set[str],
+        all_res_students: Optional[set[str]] = None,
+        all_att_students: Optional[set[str]] = None
     ) -> dict[str, Any]:
         """
-        Cross-validates student presence across the 4 primary datasets.
+        Cross-validates student presence across the datasets.
         """
-        all_students = sem1_res_students.union(sem2_res_students).union(sem1_att_students).union(sem2_att_students)
+        all_res = all_res_students if all_res_students is not None else sem1_res_students.union(sem2_res_students)
+        all_att = all_att_students if all_att_students is not None else sem1_att_students.union(sem2_att_students)
+        all_students = all_res.union(all_att)
         
-        # A. Present in all 4 datasets
-        present_in_all = sem1_res_students.intersection(sem2_res_students).intersection(sem1_att_students).intersection(sem2_att_students)
-        
-        # All results vs all attendance
-        all_res = sem1_res_students.union(sem2_res_students)
-        all_att = sem1_att_students.union(sem2_att_students)
+        # A. Present in both results and attendance
+        present_in_all = all_res.intersection(all_att)
 
         # B. In results but missing attendance
         in_res_missing_att = all_res - all_att

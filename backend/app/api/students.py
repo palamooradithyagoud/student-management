@@ -107,37 +107,31 @@ def list_students(
         elif s2_present and not s1_present:
             status_cat = "Missing from Sem 1"
 
-        # Extract Sem 1 & Sem 2 SGPA and Backlog counts
+        # Extract SGPA and Backlog counts across all semesters
         s1_sgpa = None
         s2_sgpa = None
         s1_back = 0
         s2_back = 0
+        all_sgpas = []
+        total_back = 0
         
         if not sum_df.empty:
-            s1_rows = sum_df[(sum_df["roll_no"].astype(str) == roll) & (sum_df["semester"] == 1)]
-            s2_rows = sum_df[(sum_df["roll_no"].astype(str) == roll) & (sum_df["semester"] == 2)]
-            
-            if not s1_rows.empty and pd.notna(s1_rows.iloc[0].get("sgpa")):
-                s1_sgpa = float(s1_rows.iloc[0]["sgpa"])
-            if not s1_rows.empty and pd.notna(s1_rows.iloc[0].get("backlog_count")):
-                s1_back = int(s1_rows.iloc[0]["backlog_count"])
+            stu_sums = sum_df[sum_df["roll_no"].astype(str) == roll]
+            for _, srow in stu_sums.iterrows():
+                sem_idx = int(srow["semester"])
+                sg_val = float(srow["sgpa"]) if pd.notna(srow.get("sgpa")) else None
+                bk_val = int(srow["backlog_count"]) if pd.notna(srow.get("backlog_count")) else 0
+                if sem_idx == 1:
+                    s1_sgpa = sg_val
+                    s1_back = bk_val
+                elif sem_idx == 2:
+                    s2_sgpa = sg_val
+                    s2_back = bk_val
+                if sg_val is not None:
+                    all_sgpas.append(sg_val)
+                total_back += bk_val
 
-            if not s2_rows.empty and pd.notna(s2_rows.iloc[0].get("sgpa")):
-                s2_sgpa = float(s2_rows.iloc[0]["sgpa"])
-            if not s2_rows.empty and pd.notna(s2_rows.iloc[0].get("backlog_count")):
-                s2_back = int(s2_rows.iloc[0]["backlog_count"])
-
-        # Calculate Overall SGPA
-        if s1_sgpa is not None and s2_sgpa is not None:
-            overall_sgpa = round((s1_sgpa + s2_sgpa) / 2.0, 2)
-        elif s1_sgpa is not None:
-            overall_sgpa = s1_sgpa
-        elif s2_sgpa is not None:
-            overall_sgpa = s2_sgpa
-        else:
-            overall_sgpa = None
-
-        total_back = (s1_back or 0) + (s2_back or 0)
+        overall_sgpa = round(sum(all_sgpas) / len(all_sgpas), 2) if all_sgpas else None
 
         all_students_data.append({
             "id": int(r.name) + 1,
@@ -297,26 +291,16 @@ def get_student_detail(
     rank_map = {}
     for _, r in students_df.iterrows():
         r_roll = str(r["roll_no"]).strip().upper()
-        s1_rows = sum_df[(sum_df["roll_no"].astype(str).str.upper() == r_roll) & (sum_df["semester"] == 1)]
-        s2_rows = sum_df[(sum_df["roll_no"].astype(str).str.upper() == r_roll) & (sum_df["semester"] == 2)]
-        s1_sgpa = float(s1_rows.iloc[0]["sgpa"]) if not s1_rows.empty and pd.notna(s1_rows.iloc[0].get("sgpa")) else None
-        s2_sgpa = float(s2_rows.iloc[0]["sgpa"]) if not s2_rows.empty and pd.notna(s2_rows.iloc[0].get("sgpa")) else None
-        s1_b = int(s1_rows.iloc[0]["backlog_count"]) if not s1_rows.empty and pd.notna(s1_rows.iloc[0].get("backlog_count")) else 0
-        s2_b = int(s2_rows.iloc[0]["backlog_count"]) if not s2_rows.empty and pd.notna(s2_rows.iloc[0].get("backlog_count")) else 0
+        stu_sums = sum_df[sum_df["roll_no"].astype(str).str.upper() == r_roll]
+        sg_list = [float(x) for x in stu_sums["sgpa"].dropna().tolist() if pd.notna(x)]
+        c = round(sum(sg_list) / len(sg_list), 2) if sg_list else 0.0
+        tot_b = int(stu_sums["backlog_count"].dropna().sum()) if not stu_sums.empty and "backlog_count" in stu_sums.columns else 0
         
-        if s1_sgpa is not None and s2_sgpa is not None:
-            c = round((s1_sgpa + s2_sgpa) / 2.0, 2)
-        elif s1_sgpa is not None:
-            c = s1_sgpa
-        elif s2_sgpa is not None:
-            c = s2_sgpa
-        else:
-            c = 0.0
         rank_map[r_roll] = {
             "roll_no": r_roll,
             "section": str(r.get("section", "")).upper(),
             "cgpa": c,
-            "backlogs": s1_b + s2_b
+            "backlogs": tot_b
         }
 
     sorted_dept = sorted(rank_map.values(), key=lambda x: (x["cgpa"], -x["backlogs"]), reverse=True)
@@ -448,9 +432,10 @@ def get_student_detail(
                 "backlog_change": s_back_chg
             })
 
-    # Overall CGPA
-    if sem1_sgpa is not None and sem2_sgpa is not None:
-        overall_cgpa = round((sem1_sgpa + sem2_sgpa) / 2.0, 2)
+    # Overall CGPA across all completed semesters
+    valid_sgpas = [s["sgpa"] for s in semester_summaries if s.get("sgpa") is not None]
+    if valid_sgpas:
+        overall_cgpa = round(sum(valid_sgpas) / len(valid_sgpas), 2)
     elif sem1_sgpa is not None:
         overall_cgpa = sem1_sgpa
     elif sem2_sgpa is not None:

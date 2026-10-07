@@ -68,29 +68,27 @@ class StudentSemesterSummaryBuilder:
 
         summary_df = pd.DataFrame(rows)
 
-        # Compute Sem 1 -> Sem 2 deltas per student
+        # Compute consecutive semester progression deltas per student (e.g. S1 -> S2, S2 -> S3, ...)
         for roll, student_records in summary_df.groupby("roll_no"):
-            sem1_rec = student_records[student_records["semester"] == 1]
-            sem2_rec = student_records[student_records["semester"] == 2]
+            sorted_recs = student_records.sort_values("semester")
+            prev_row = None
+            for curr_idx, curr_row in sorted_recs.iterrows():
+                if prev_row is not None:
+                    curr_sgpa = curr_row["sgpa"]
+                    prev_sgpa = prev_row["sgpa"]
+                    if pd.notna(curr_sgpa) and pd.notna(prev_sgpa):
+                        summary_df.loc[curr_idx, "sgpa_change"] = round(float(curr_sgpa) - float(prev_sgpa), 2)
 
-            if not sem1_rec.empty and not sem2_rec.empty:
-                sem1_idx = sem1_rec.index[0]
-                sem2_idx = sem2_rec.index[0]
+                    curr_att = curr_row["average_attendance"]
+                    prev_att = prev_row["average_attendance"]
+                    if pd.notna(curr_att) and pd.notna(prev_att):
+                        summary_df.loc[curr_idx, "attendance_change"] = round(float(curr_att) - float(prev_att), 2)
 
-                s1_sgpa = summary_df.loc[sem1_idx, "sgpa"]
-                s2_sgpa = summary_df.loc[sem2_idx, "sgpa"]
-                if pd.notna(s1_sgpa) and pd.notna(s2_sgpa):
-                    summary_df.loc[sem2_idx, "sgpa_change"] = round(float(s2_sgpa) - float(s1_sgpa), 2)
-
-                s1_att = summary_df.loc[sem1_idx, "average_attendance"]
-                s2_att = summary_df.loc[sem2_idx, "average_attendance"]
-                if pd.notna(s1_att) and pd.notna(s2_att):
-                    summary_df.loc[sem2_idx, "attendance_change"] = round(float(s2_att) - float(s1_att), 2)
-
-                s1_back = summary_df.loc[sem1_idx, "backlog_count"]
-                s2_back = summary_df.loc[sem2_idx, "backlog_count"]
-                if pd.notna(s1_back) and pd.notna(s2_back):
-                    summary_df.loc[sem2_idx, "backlog_change"] = int(s2_back) - int(s1_back)
+                    curr_back = curr_row["backlog_count"]
+                    prev_back = prev_row["backlog_count"]
+                    if pd.notna(curr_back) and pd.notna(prev_back):
+                        summary_df.loc[curr_idx, "backlog_change"] = int(curr_back) - int(prev_back)
+                prev_row = curr_row
 
         summary_df = summary_df.sort_values(by=["roll_no", "semester"])
         summary_df.to_csv(out_path, index=False, encoding="utf-8")

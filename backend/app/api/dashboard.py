@@ -193,15 +193,17 @@ def get_dashboard_overview(
                 card["theme"] = color_themes[idx % len(color_themes)]
                 subject_cards.append(card)
 
-            # 2. 6 Section-Wise Pass Percentages (Sem 1 A, Sem 2 A, Sem 1 B, Sem 2 B, Sem 1 C, Sem 2 C)
+            # 2. Section-Wise Pass Percentages across all available semesters and sections
             section_pass_rates = []
+            distinct_pairs = m_df[["semester", "section"]].dropna().drop_duplicates()
+            sorted_pairs = sorted(
+                [(int(row["semester"]), str(row["section"]).strip().upper()) for _, row in distinct_pairs.iterrows()],
+                key=lambda x: (x[0], x[1])
+            )
+
             sec_sem_pairs = [
-                (1, "A", "Sem 1 CSM A", "1-CSM-A"),
-                (2, "A", "Sem 2 CSM A", "2-CSM-A"),
-                (1, "B", "Sem 1 CSM B", "1-CSM-B"),
-                (2, "B", "Sem 2 CSM B", "2-CSM-B"),
-                (1, "C", "Sem 1 CSM C", "1-CSM-C"),
-                (2, "C", "Sem 2 CSM C", "2-CSM-C"),
+                (sem, sec, f"Sem {sem} CSM {sec}", f"{sem}-CSM-{sec}")
+                for sem, sec in sorted_pairs
             ]
 
             max_pass_rate = 0.0
@@ -248,14 +250,11 @@ def get_dashboard_overview(
                 name = grp["student_name"].iloc[0] or f"Student {roll}"
                 sec = grp["section"].iloc[0] or "A"
 
-                sem1_grp = grp[grp["semester"] == 1]
-                sem2_grp = grp[grp["semester"] == 2]
-
-                s1_sgpa = float(sem1_grp["sgpa"].dropna().iloc[0]) if not sem1_grp["sgpa"].dropna().empty else None
-                s2_sgpa = float(sem2_grp["sgpa"].dropna().iloc[0]) if not sem2_grp["sgpa"].dropna().empty else None
-
-                sgpa_list = [x for x in [s1_sgpa, s2_sgpa] if x is not None and pd.notna(x)]
+                sgpa_list = [float(x) for x in grp["sgpa"].dropna().tolist() if pd.notna(x)]
                 cgpa = round(sum(sgpa_list) / len(sgpa_list), 2) if sgpa_list else 0.0
+
+                s1_sgpa = float(grp[grp["semester"] == 1]["sgpa"].dropna().iloc[0]) if not grp[grp["semester"] == 1]["sgpa"].dropna().empty else None
+                s2_sgpa = float(grp[grp["semester"] == 2]["sgpa"].dropna().iloc[0]) if not grp[grp["semester"] == 2]["sgpa"].dropna().empty else None
                 avg_attn = round(float(grp["attendance_percentage"].dropna().mean()), 1) if not grp["attendance_percentage"].dropna().empty else 85.0
 
                 student_stats.append({

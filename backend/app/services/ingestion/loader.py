@@ -279,73 +279,141 @@ class RawDataLoader:
         - Row 6: Conducted (C) and Attended (A) indicators
         - Row 7+: Student records with Roll Number and subject attendance counts.
         """
-        wb = openpyxl.load_workbook(file_path, data_only=True)
-        ws = wb.active
-
-        sub_col_map: Dict[int, tuple] = {}
-        cur_sub_code = None
-        cur_sub_name = None
-
-        roll_col = 2
-        name_col = None
-        sec_col = None
-
-        for c in range(1, ws.max_column + 1):
-            v4 = ws.cell(row=4, column=c).value
-            if v4:
-                v4_str = str(v4).strip()
-                if "Roll" in v4_str:
-                    roll_col = c
-                elif "Name" in v4_str:
-                    name_col = c
-                elif "Section" in v4_str or "Sec" in v4_str:
-                    sec_col = c
-                elif "Total" in v4_str:
-                    cur_sub_code = None
-                else:
-                    parts = v4_str.replace("\n", " ").split("(")
-                    cur_sub_code = parts[0].strip().upper()
-                    cur_sub_name = parts[1].replace(")", "").strip() if len(parts) > 1 else cur_sub_code
-
-            c_type = ws.cell(row=6, column=c).value
-            if cur_sub_code and c_type:
-                sub_col_map[c] = (cur_sub_code, cur_sub_name, str(c_type).strip().upper())
-
+        ext = file_path.suffix.lower()
         sec_hint = section or ("A" if ("_A" in file_path.name or "- A" in file_path.name) else ("B" if ("_B" in file_path.name or "- B" in file_path.name) else ("C" if ("_C" in file_path.name or "- C" in file_path.name) else "A")))
-
         records = []
-        for r in range(7, ws.max_row + 1):
-            roll = ws.cell(row=r, column=roll_col).value
-            if not roll or str(roll).strip() == "":
-                continue
 
-            roll_clean = str(roll).strip().upper()
-            name_clean = str(ws.cell(row=r, column=name_col).value or "").strip() if name_col else None
-            sec_clean = str(ws.cell(row=r, column=sec_col).value).strip() if (sec_col and ws.cell(row=r, column=sec_col).value) else sec_hint
+        if ext == ".xlsx":
+            wb = openpyxl.load_workbook(file_path, data_only=True)
+            ws = wb.active
 
-            sub_att: Dict[str, Dict[str, Any]] = {}
-            for c, (sc, sn, ctype) in sub_col_map.items():
-                if sc not in sub_att:
-                    sub_att[sc] = {"code": sc, "name": sn, "C": 0, "A": 0}
-                val = ws.cell(row=r, column=c).value
-                if val is not None and str(val).isdigit():
-                    sub_att[sc][ctype] = float(val)
+            sub_col_map: Dict[int, tuple] = {}
+            cur_sub_code = None
+            cur_sub_name = None
 
-            for sc, avals in sub_att.items():
-                cond = avals["C"]
-                att = avals["A"]
-                pct = round((att / cond * 100.0), 2) if cond > 0 else 0.0
-                records.append({
-                    "roll_no": roll_clean,
-                    "student_name": name_clean if name_clean else None,
-                    "section": sec_clean,
-                    "semester": semester,
-                    "subject_code": sc,
-                    "subject_name": avals.get("name") or sc,
-                    "attendance_percentage": pct,
-                    "classes_attended": int(att),
-                    "classes_conducted": int(cond)
-                })
+            roll_col = 2
+            name_col = None
+            sec_col = None
+
+            for c in range(1, ws.max_column + 1):
+                v4 = ws.cell(row=4, column=c).value
+                if v4:
+                    v4_str = str(v4).strip()
+                    if "Roll" in v4_str:
+                        roll_col = c
+                    elif "Name" in v4_str:
+                        name_col = c
+                    elif "Section" in v4_str or "Sec" in v4_str:
+                        sec_col = c
+                    elif "Total" in v4_str:
+                        cur_sub_code = None
+                    else:
+                        parts = v4_str.replace("\n", " ").split("(")
+                        cur_sub_code = parts[0].strip().upper()
+                        cur_sub_name = parts[1].replace(")", "").strip() if len(parts) > 1 else cur_sub_code
+
+                c_type = ws.cell(row=6, column=c).value
+                if cur_sub_code and c_type:
+                    sub_col_map[c] = (cur_sub_code, cur_sub_name, str(c_type).strip().upper())
+
+            for r in range(7, ws.max_row + 1):
+                roll = ws.cell(row=r, column=roll_col).value
+                if not roll or str(roll).strip() == "":
+                    continue
+
+                roll_clean = str(roll).strip().upper()
+                name_clean = str(ws.cell(row=r, column=name_col).value or "").strip() if name_col else None
+                sec_clean = str(ws.cell(row=r, column=sec_col).value).strip() if (sec_col and ws.cell(row=r, column=sec_col).value) else sec_hint
+
+                sub_att: Dict[str, Dict[str, Any]] = {}
+                for c, (sc, sn, ctype) in sub_col_map.items():
+                    if sc not in sub_att:
+                        sub_att[sc] = {"code": sc, "name": sn, "C": 0, "A": 0}
+                    val = ws.cell(row=r, column=c).value
+                    if val is not None and str(val).replace('.', '', 1).isdigit():
+                        sub_att[sc][ctype] = float(val)
+
+                for sc, avals in sub_att.items():
+                    cond = avals["C"]
+                    att = avals["A"]
+                    pct = round((att / cond * 100.0), 2) if cond > 0 else 0.0
+                    records.append({
+                        "roll_no": roll_clean,
+                        "student_name": name_clean if name_clean else None,
+                        "section": sec_clean,
+                        "semester": semester,
+                        "subject_code": sc,
+                        "subject_name": avals.get("name") or sc,
+                        "attendance_percentage": pct,
+                        "classes_attended": int(att),
+                        "classes_conducted": int(cond)
+                    })
+
+        elif ext == ".xls":
+            wb = xlrd.open_workbook(file_path)
+            sh = wb.sheet_by_index(0)
+
+            sub_col_map = {}
+            cur_sub_code = None
+            cur_sub_name = None
+
+            roll_col = 1
+            name_col = None
+            sec_col = None
+
+            for c in range(sh.ncols):
+                v4 = sh.cell_value(3, c) if sh.nrows > 3 else ""
+                if v4:
+                    v4_str = str(v4).strip()
+                    if "Roll" in v4_str:
+                        roll_col = c
+                    elif "Name" in v4_str:
+                        name_col = c
+                    elif "Section" in v4_str or "Sec" in v4_str:
+                        sec_col = c
+                    elif "Total" in v4_str:
+                        cur_sub_code = None
+                    else:
+                        parts = v4_str.replace("\n", " ").split("(")
+                        cur_sub_code = parts[0].strip().upper()
+                        cur_sub_name = parts[1].replace(")", "").strip() if len(parts) > 1 else cur_sub_code
+
+                c_type = sh.cell_value(5, c) if sh.nrows > 5 else ""
+                if cur_sub_code and c_type:
+                    sub_col_map[c] = (cur_sub_code, cur_sub_name, str(c_type).strip().upper())
+
+            for r in range(6, sh.nrows):
+                roll = sh.cell_value(r, roll_col)
+                if not roll or str(roll).strip() == "":
+                    continue
+
+                roll_clean = str(roll).strip().upper()
+                name_clean = str(sh.cell_value(r, name_col) or "").strip() if name_col is not None else None
+                sec_clean = str(sh.cell_value(r, sec_col)).strip() if (sec_col is not None and sh.cell_value(r, sec_col)) else sec_hint
+
+                sub_att = {}
+                for c, (sc, sn, ctype) in sub_col_map.items():
+                    if sc not in sub_att:
+                        sub_att[sc] = {"code": sc, "name": sn, "C": 0, "A": 0}
+                    val = sh.cell_value(r, c)
+                    if val is not None and str(val).replace('.', '', 1).isdigit():
+                        sub_att[sc][ctype] = float(val)
+
+                for sc, avals in sub_att.items():
+                    cond = avals["C"]
+                    att = avals["A"]
+                    pct = round((att / cond * 100.0), 2) if cond > 0 else 0.0
+                    records.append({
+                        "roll_no": roll_clean,
+                        "student_name": name_clean if name_clean else None,
+                        "section": sec_clean,
+                        "semester": semester,
+                        "subject_code": sc,
+                        "subject_name": avals.get("name") or sc,
+                        "attendance_percentage": pct,
+                        "classes_attended": int(att),
+                        "classes_conducted": int(cond)
+                    })
 
         return pd.DataFrame(records)
 

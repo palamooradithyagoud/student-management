@@ -181,16 +181,21 @@ class DataPipelineOrchestrator:
         student_sem_summary_df = StudentSemesterSummaryBuilder.build_student_semester_summary(master_df)
 
         # 11. Validation & Quality Checks
-        s1_res_stus = set(s1_res_df["roll_no"]) if not s1_res_df.empty else set()
-        s2_res_stus = set(s2_res_df["roll_no"]) if not s2_res_df.empty else set()
-        s1_att_stus = set(s1_att_df["roll_no"]) if not s1_att_df.empty else set()
-        s2_att_stus = set(s2_att_df["roll_no"]) if not s2_att_df.empty else set()
+        all_res_rolls = set(results_df["roll_no"].astype(str)) if not results_df.empty and "roll_no" in results_df.columns else set()
+        all_att_rolls = set(attendance_df["roll_no"].astype(str)) if not attendance_df.empty and "roll_no" in attendance_df.columns else set()
+
+        s1_res_stus = set(results_df[results_df["semester"] == 1]["roll_no"].astype(str)) if not results_df.empty and "semester" in results_df.columns else set()
+        s2_res_stus = set(results_df[results_df["semester"] == 2]["roll_no"].astype(str)) if not results_df.empty and "semester" in results_df.columns else set()
+        s1_att_stus = set(attendance_df[attendance_df["semester"] == 1]["roll_no"].astype(str)) if not attendance_df.empty and "semester" in attendance_df.columns else set()
+        s2_att_stus = set(attendance_df[attendance_df["semester"] == 2]["roll_no"].astype(str)) if not attendance_df.empty and "semester" in attendance_df.columns else set()
 
         student_val = DataValidator.validate_cross_dataset_students(
             sem1_res_students=s1_res_stus,
             sem2_res_students=s2_res_stus,
             sem1_att_students=s1_att_stus,
-            sem2_att_students=s2_att_stus
+            sem2_att_students=s2_att_stus,
+            all_res_students=all_res_rolls,
+            all_att_students=all_att_rolls
         )
 
         results_val = DataValidator.validate_results_data(results_df)
@@ -225,7 +230,7 @@ class DataPipelineOrchestrator:
 
         # 13. Sync to Database
         if self.db:
-            self._sync_to_db(students_df, subjects_df, results_df, attendance_df, semester_summary_df)
+            self._sync_to_db(students_df, subjects_df, results_df, attendance_df, semester_summary_df, batch_name=batch_name)
 
         elapsed = round(time.time() - start_time, 2)
 
@@ -417,15 +422,23 @@ class DataPipelineOrchestrator:
 
         return pd.DataFrame(rows)
 
-    def _sync_to_db(self, students_df: pd.DataFrame, subjects_df: pd.DataFrame, results_df: pd.DataFrame, attendance_df: pd.DataFrame, semester_summary_df: pd.DataFrame):
+    def _sync_to_db(self, students_df: pd.DataFrame, subjects_df: pd.DataFrame, results_df: pd.DataFrame, attendance_df: pd.DataFrame, semester_summary_df: pd.DataFrame, batch_name: Optional[str] = None):
         if not self.db:
             return
         try:
-            self.db.query(Attendance).delete()
-            self.db.query(Result).delete()
-            self.db.query(SemesterSummary).delete()
-            self.db.query(Subject).delete()
-            self.db.query(Student).delete()
+            if batch_name:
+                batch_rolls = [str(r["roll_no"]).strip() for _, r in students_df.iterrows()]
+                if batch_rolls:
+                    self.db.query(Attendance).filter(Attendance.roll_no.in_(batch_rolls)).delete(synchronize_session=False)
+                    self.db.query(Result).filter(Result.roll_no.in_(batch_rolls)).delete(synchronize_session=False)
+                    self.db.query(SemesterSummary).filter(SemesterSummary.roll_no.in_(batch_rolls)).delete(synchronize_session=False)
+                    self.db.query(Student).filter(Student.roll_no.in_(batch_rolls)).delete(synchronize_session=False)
+            else:
+                self.db.query(Attendance).delete()
+                self.db.query(Result).delete()
+                self.db.query(SemesterSummary).delete()
+                self.db.query(Student).delete()
+
             self.db.commit()
 
             for _, r in students_df.iterrows():
@@ -438,13 +451,19 @@ class DataPipelineOrchestrator:
                 ))
 
             for _, r in subjects_df.iterrows():
-                self.db.add(Subject(
-                    subject_id=str(r["subject_id"]),
-                    subject_code=str(r["subject_code"]),
-                    subject_name=str(r["subject_name"]),
-                    semester=int(r["semester"]),
-                    credits=float(r["credits"]) if pd.notna(r.get("credits")) else None
-                ))
+                s_id = str(r["subject_id"])
+                existing_sub = self.db.query(Subject).filter(Subject.subject_id == s_id).first()
+                if not existing_sub:
+                    self.db.add(Subject(
+                        subject_id=s_id,
+                        subject_code=str(r["subject_code"]),
+                        subject_name=str(r["subject_name"]),
+                        semester=int(r["semester"]),
+                        credits=float(r["credits"]) if pd.notna(r.get("credits")) else None
+                    ))
+                else:
+                    existing_sub.subject_name = str(r["subject_name"])
+                    existing_sub.credits = float(r["credits"]) if pd.notna(r.get("credits")) else None
 
             for _, r in results_df.iterrows():
                 self.db.add(Result(

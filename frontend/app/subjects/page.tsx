@@ -514,6 +514,11 @@ export default function SubjectsPage() {
     fetchSubjects();
   }, []);
 
+  const availableSemesters = useMemo(() => {
+    const sems = Array.from(new Set(subjects.map((s) => s.semester))).filter(Boolean).sort((a: any, b: any) => a - b);
+    return sems.length > 0 ? sems : [1, 2];
+  }, [subjects]);
+
   const filteredSubjects = useMemo(() => {
     return subjects.filter((s) => {
       const matchesSem = semFilter === null || s.semester === semFilter;
@@ -556,22 +561,28 @@ export default function SubjectsPage() {
               />
             </div>
 
-            <div className="flex items-center space-x-1.5 bg-slate-100/90 p-1 rounded-full text-xs font-semibold self-start sm:self-auto shadow-2xs">
-              {[
-                { label: 'All Semesters', val: null },
-                { label: 'Semester 1', val: 1 },
-                { label: 'Semester 2', val: 2 },
-              ].map((tab) => (
+            <div className="flex items-center space-x-1.5 bg-slate-100/90 p-1 rounded-full text-xs font-semibold self-start sm:self-auto shadow-2xs flex-wrap">
+              <button
+                onClick={() => setSemFilter(null)}
+                className={`px-3.5 py-1 rounded-full transition-all duration-200 ease-out cursor-pointer ${
+                  semFilter === null
+                    ? 'bg-slate-900 text-white shadow-xs scale-100 font-bold'
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                All Semesters
+              </button>
+              {availableSemesters.map((semNum) => (
                 <button
-                  key={tab.label}
-                  onClick={() => setSemFilter(tab.val)}
+                  key={semNum}
+                  onClick={() => setSemFilter(semNum)}
                   className={`px-3.5 py-1 rounded-full transition-all duration-200 ease-out cursor-pointer ${
-                    semFilter === tab.val
+                    semFilter === semNum
                       ? 'bg-slate-900 text-white shadow-xs scale-100 font-bold'
                       : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/60'
                   }`}
                 >
-                  {tab.label}
+                  Semester {semNum}
                 </button>
               ))}
             </div>

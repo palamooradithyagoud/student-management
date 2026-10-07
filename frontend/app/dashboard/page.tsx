@@ -57,7 +57,7 @@ const cardColorMap: Record<string, { bg: string; border: string; bar: string; ba
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<'All' | 'Sem 1' | 'Sem 2'>('All');
+  const [activeFilter, setActiveFilter] = useState<string>('All');
   const [topperSectionFilter, setTopperSectionFilter] = useState<string>('ALL');
   const [passMetric, setPassMetric] = useState<'all_clear' | 'exam_pass'>('all_clear');
   const router = useRouter();
@@ -77,8 +77,12 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, []);
 
-
   const rawSubjectCards = data?.subject_cards || [];
+
+  const availableSemesters = React.useMemo(() => {
+    const sems = Array.from(new Set(rawSubjectCards.map((c: any) => c.semester))).filter(Boolean).sort((a: any, b: any) => a - b);
+    return sems.length > 0 ? sems : [1, 2];
+  }, [rawSubjectCards]);
 
   const subjectCards = activeFilter === 'All'
     ? rawSubjectCards
@@ -142,20 +146,33 @@ export default function DashboardPage() {
               </h2>
 
               {/* Filter Pills */}
-              <div className="flex items-center space-x-1 text-xs font-semibold text-slate-500 bg-slate-100/80 p-1 rounded-full shadow-2xs">
-                {(['All', 'Sem 1', 'Sem 2'] as const).map((filter) => (
-                  <button
-                    key={filter}
-                    onClick={() => setActiveFilter(filter)}
-                    className={`transition-all duration-200 ease-out cursor-pointer ${
-                      activeFilter === filter
-                        ? 'bg-slate-900 text-white px-3 py-1 rounded-full font-bold shadow-xs scale-100'
-                        : 'text-slate-500 hover:text-slate-900 px-2.5 py-1 hover:bg-slate-200/60 rounded-full'
-                    }`}
-                  >
-                    {filter}
-                  </button>
-                ))}
+              <div className="flex items-center space-x-1 text-xs font-semibold text-slate-500 bg-slate-100/80 p-1 rounded-full shadow-2xs flex-wrap">
+                <button
+                  onClick={() => setActiveFilter('All')}
+                  className={`transition-all duration-200 ease-out cursor-pointer ${
+                    activeFilter === 'All'
+                      ? 'bg-slate-900 text-white px-3 py-1 rounded-full font-bold shadow-xs scale-100'
+                      : 'text-slate-500 hover:text-slate-900 px-2.5 py-1 hover:bg-slate-200/60 rounded-full'
+                  }`}
+                >
+                  All
+                </button>
+                {availableSemesters.map((semNum: any) => {
+                  const filterLabel = `Sem ${semNum}`;
+                  return (
+                    <button
+                      key={semNum}
+                      onClick={() => setActiveFilter(filterLabel)}
+                      className={`transition-all duration-200 ease-out cursor-pointer ${
+                        activeFilter === filterLabel
+                          ? 'bg-slate-900 text-white px-3 py-1 rounded-full font-bold shadow-xs scale-100'
+                          : 'text-slate-500 hover:text-slate-900 px-2.5 py-1 hover:bg-slate-200/60 rounded-full'
+                      }`}
+                    >
+                      {filterLabel}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
