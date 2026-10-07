@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -35,17 +36,20 @@ app = FastAPI(
 )
 
 # CORS Configuration
-origins = [
-    "https://student-management-frontend-hr9l.onrender.com",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-]
+origins = list(settings.ALLOWED_ORIGINS)
+
+# Dynamically add from FRONTEND_URL or ALLOWED_ORIGINS env var if present
+extra_origins = os.getenv("ALLOWED_ORIGINS") or os.getenv("FRONTEND_URL")
+if extra_origins:
+    for o in extra_origins.split(","):
+        cleaned = o.strip()
+        if cleaned and cleaned not in origins:
+            origins.append(cleaned)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

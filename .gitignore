@@ -49,3 +49,9 @@ frontend/tsconfig.tsbuildinfo
 .DS_Store
 Thumbs.db
 *.log
+
+# Data directories (uploaded files, processed CSVs, reports)
+data/raw/
+data/processed/
+data/reports/
+academic_intelligence.db

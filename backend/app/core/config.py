@@ -49,7 +49,12 @@ class Settings(BaseSettings):
 
     # CORS
     ALLOWED_ORIGINS: list[str] = [
+        # Production — Vercel frontend
+        "https://student-management-csm.vercel.app",
+        "https://student-management-palamooradithyagouds-projects.vercel.app",
+        # Production — old Render deploy (kept for compatibility)
         "https://student-management-frontend-hr9l.onrender.com",
+        # Local development
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:8000",
