@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+from urllib.parse import unquote, quote_plus
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 # Dynamically resolve project directory structure
@@ -14,10 +16,27 @@ if (_REPO_ROOT / "data").exists() or (_REPO_ROOT / "academic_intelligence.db").e
 else:
     BASE_DIR = _BACKEND_DIR
 
-# Sanitize DATABASE_URL (Render & Supabase provide 'postgres://', SQLAlchemy 2.0+ requires 'postgresql://')
-_raw_db_url = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'academic_intelligence.db'}")
-if _raw_db_url.startswith("postgres://"):
-    _raw_db_url = _raw_db_url.replace("postgres://", "postgresql://", 1)
+def sanitize_database_url(url: str) -> str:
+    """Sanitize database URL for SQLAlchemy 2.0+ and URL-encode special chars in password."""
+    if not url:
+        return url
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    if "://" in url:
+        scheme, remainder = url.split("://", 1)
+        if "@" in remainder:
+            last_at_idx = remainder.rfind("@")
+            user_pass = remainder[:last_at_idx]
+            host_db = remainder[last_at_idx + 1:]
+            if ":" in user_pass:
+                first_colon_idx = user_pass.find(":")
+                username = user_pass[:first_colon_idx]
+                raw_password = user_pass[first_colon_idx + 1:]
+                clean_password = quote_plus(unquote(raw_password))
+                return f"{scheme}://{username}:{clean_password}@{host_db}"
+    return url
+
+_raw_db_url = sanitize_database_url(os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'academic_intelligence.db'}"))
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI-Based Student Academic Risk & Performance Intelligence System"
@@ -31,6 +50,11 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = _raw_db_url
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        return sanitize_database_url(v)
 
     # Security / JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "csm_academic_intelligence_super_secret_jwt_key_2026")
