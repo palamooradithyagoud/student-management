@@ -20,6 +20,7 @@ from backend.app.models.subject import Subject
 from backend.app.models.result import Result
 from backend.app.models.attendance import Attendance
 from backend.app.models.semester_summary import SemesterSummary
+from backend.app.models.upload_log import UploadLog
 
 class DataPipelineOrchestrator:
     """
@@ -35,6 +36,7 @@ class DataPipelineOrchestrator:
 
     def run_pipeline(
         self,
+        batch_name: Optional[str] = None,
         sem1_res_path: Optional[Path] = None,
         sem2_res_path: Optional[Path] = None,
         sem1_att_path: Optional[Path] = None,
@@ -43,59 +45,110 @@ class DataPipelineOrchestrator:
         start_time = time.time()
         self.logger.clear()
 
-        # 1. Discover all authentic input datasets
+        # 1. Discover all uploaded input datasets for this batch
         base_data = settings.DATA_DIR
-        sem_res_dir = base_data / "sem result"
-        att_dir = base_data / "ATTENDENCE"
         raw_dir = base_data / "raw"
 
-        # Locate Sem 1 and Sem 2 Results
-        p_s1_res = sem1_res_path
-        p_s2_res = sem2_res_path
+        # Query upload logs from DB if available
+        upload_records = []
+        if self.db:
+            q = self.db.query(UploadLog)
+            if batch_name:
+                q = q.filter(UploadLog.batch_name == batch_name)
+            upload_records = q.all()
 
-        if not p_s1_res or not p_s1_res.exists():
-            for f in list(sem_res_dir.glob("*1-1*")) + list(raw_dir.glob("*sem1*res*")) + list(raw_dir.glob("*sem1*")):
-                p_s1_res = f
-                break
+        all_res_dfs = []
+        all_att_dfs = []
 
-        if not p_s2_res or not p_s2_res.exists():
-            for f in list(sem_res_dir.glob("*1-2*")) + list(raw_dir.glob("*sem2*res*")) + list(raw_dir.glob("*sem2*")):
-                p_s2_res = f
-                break
+        # Iterate through Semesters 1 to 8
+        for sem in range(1, 9):
+            # Locate Result file for this semester
+            res_file = None
+            if sem == 1 and sem1_res_path and sem1_res_path.exists():
+                res_file = sem1_res_path
+            elif sem == 2 and sem2_res_path and sem2_res_path.exists():
+                res_file = sem2_res_path
+            else:
+                # Find in DB upload logs first
+                res_log = next(
+                    (l for l in upload_records if l.semester == sem and ("result" in l.dataset_type.lower() or l.section == "OVERALL")),
+                    None
+                )
+                if res_log and (raw_dir / res_log.filename).exists():
+                    res_file = raw_dir / res_log.filename
+                else:
+                    # Look in raw_dir for uploaded results matching pattern
+                    patterns = [
+                        f"*results*{batch_name}*sem{sem}*" if batch_name else None,
+                        f"*results*sem{sem}*",
+                    ]
+                    for pat in filter(None, patterns):
+                        matches = list(raw_dir.glob(pat))
+                        if matches:
+                            res_file = matches[0]
+                            break
 
-        # Locate Section-wise Attendance files
-        s1_att_files: List[Path] = []
-        s2_att_files: List[Path] = []
+            if res_file and res_file.exists():
+                df_res = self._load_and_clean_results(res_file, semester=sem, dataset_type=f"sem{sem}_results")
+                if not df_res.empty:
+                    all_res_dfs.append(df_res)
 
-        if sem1_att_path and sem1_att_path.exists():
-            s1_att_files = [sem1_att_path]
-        else:
-            s1_att_files = sorted(list(att_dir.glob("*I Semester*.xlsx")) + list(raw_dir.glob("*sem1*att*.xlsx")))
+            # Locate Section-wise Attendance files for this semester
+            att_files_with_sec = []
+            if sem == 1 and sem1_att_path and sem1_att_path.exists():
+                att_files_with_sec.append((sem1_att_path, "A"))
+            elif sem == 2 and sem2_att_path and sem2_att_path.exists():
+                att_files_with_sec.append((sem2_att_path, "A"))
+            else:
+                # Find in DB upload logs
+                att_logs = [l for l in upload_records if l.semester == sem and ("attendance" in l.dataset_type.lower() or l.section != "OVERALL")]
+                for l in att_logs:
+                    f = raw_dir / l.filename
+                    if f.exists():
+                        att_files_with_sec.append((f, l.section or "A"))
 
-        if sem2_att_path and sem2_att_path.exists():
-            s2_att_files = [sem2_att_path]
-        else:
-            s2_att_files = sorted(list(att_dir.glob("*II _*.xlsx")) + list(raw_dir.glob("*sem2*att*.xlsx")))
+                if not att_files_with_sec:
+                    # Check raw_dir matching pattern
+                    raw_att_matches = list(raw_dir.glob(f"*attendance*{batch_name}*sem{sem}*")) if batch_name else list(raw_dir.glob(f"*attendance*sem{sem}*"))
+                    for f in raw_att_matches:
+                        import re
+                        sec_m = re.search(r'sec([A-Za-z0-9]+)', f.name, re.IGNORECASE)
+                        sec_val = sec_m.group(1).upper() if sec_m else "A"
+                        att_files_with_sec.append((f, sec_val))
 
-        # 2. Load & Clean Results Data
-        s1_res_df = self._load_and_clean_results(p_s1_res, semester=1, dataset_type="sem1_results")
-        s2_res_df = self._load_and_clean_results(p_s2_res, semester=2, dataset_type="sem2_results")
+            for f_path, sec_val in att_files_with_sec:
+                df_att = self._load_and_clean_attendance(f_path, semester=sem, dataset_type=f"sem{sem}_attendance", section=sec_val)
+                if not df_att.empty:
+                    all_att_dfs.append(df_att)
 
-        # 3. Load & Clean Attendance Data (all sections combined)
-        s1_att_df_list = [self._load_and_clean_attendance(f, semester=1, dataset_type="sem1_attendance") for f in s1_att_files]
-        s2_att_df_list = [self._load_and_clean_attendance(f, semester=2, dataset_type="sem2_attendance") for f in s2_att_files]
+        # Combine results and attendance across all semesters
+        results_df = pd.concat(all_res_dfs, ignore_index=True) if all_res_dfs else pd.DataFrame()
+        attendance_df = pd.concat(all_att_dfs, ignore_index=True) if all_att_dfs else pd.DataFrame()
 
-        s1_att_df = pd.concat(s1_att_df_list, ignore_index=True) if s1_att_df_list else pd.DataFrame()
-        s2_att_df = pd.concat(s2_att_df_list, ignore_index=True) if s2_att_df_list else pd.DataFrame()
+        if results_df.empty and attendance_df.empty:
+            return {
+                "status": "NO_DATA",
+                "message": f"No uploaded academic datasets found for batch '{batch_name or 'selected'}'. Please upload semester results and section attendance first.",
+                "execution_time_seconds": round(time.time() - start_time, 2),
+                "total_students": 0,
+                "sem1_students": 0,
+                "sem2_students": 0,
+                "total_results": 0,
+                "total_attendance": 0,
+                "matched_records": 0,
+                "unmatched_records": 0,
+                "mapping_success_rate": 0.0,
+                "generated_files": [],
+                "critical_errors": 0,
+                "warnings": 0,
+                "records_requiring_review": 0,
+                "quality_report": {}
+            }
 
-        # Combine results and attendance
-        results_df = pd.concat([s1_res_df, s2_res_df], ignore_index=True) if (not s1_res_df.empty or not s2_res_df.empty) else pd.DataFrame()
-        attendance_df = pd.concat([s1_att_df, s2_att_df], ignore_index=True) if (not s1_att_df.empty or not s2_att_df.empty) else pd.DataFrame()
+        # Extract & Standardize Students Master Table with batch
+        students_df = self._build_students_table(results_df, attendance_df, batch_name=batch_name)
 
-        # 4. Extract & Standardize Students Master Table
-        students_df = self._build_students_table(results_df, attendance_df)
-
-        # 5. Extract & Standardize Subjects and Mappings
+        # Extract & Standardize Subjects and Mappings
         subjects_df, subject_mappings_stats = self._build_subjects_table(results_df, attendance_df)
 
         # Apply standard subject codes
@@ -219,24 +272,27 @@ class DataPipelineOrchestrator:
         df_clean["student_id"] = "STU_" + df_clean["roll_no"].astype(str)
         return df_clean
 
-    def _load_and_clean_attendance(self, file_path: Optional[Path], semester: int, dataset_type: str) -> pd.DataFrame:
+    def _load_and_clean_attendance(self, file_path: Optional[Path], semester: int, dataset_type: str, section: Optional[str] = None) -> pd.DataFrame:
         if not file_path or not file_path.exists():
             return pd.DataFrame()
-        df_raw = RawDataLoader.load_dataset(file_path, dataset_type=dataset_type, semester=semester)
+        df_raw = RawDataLoader.load_dataset(file_path, dataset_type=dataset_type, semester=semester, section=section)
         df_clean = self.normalizer.clean_attendance_dataframe(df_raw, source_file=file_path.name)
+        if section:
+            df_clean["section"] = section
         df_clean["attendance_id"] = [f"ATT_S{semester}_{r}_{sc}" for r, sc in zip(df_clean["roll_no"], df_clean.get("subject_code", [""]*len(df_clean)))]
         df_clean["student_id"] = "STU_" + df_clean["roll_no"].astype(str)
         return df_clean
 
-    def _build_students_table(self, results_df: pd.DataFrame, attendance_df: pd.DataFrame) -> pd.DataFrame:
+    def _build_students_table(self, results_df: pd.DataFrame, attendance_df: pd.DataFrame, batch_name: Optional[str] = None) -> pd.DataFrame:
         records = []
+        batch_val = batch_name or "2024-2028"
         if not results_df.empty:
             for _, r in results_df.iterrows():
                 records.append({
                     "roll_no": r.get("roll_no"),
                     "student_name": r.get("student_name"),
                     "section": r.get("section", "A"),
-                    "batch": r.get("batch", "2025-2029")
+                    "batch": batch_val
                 })
         if not attendance_df.empty:
             for _, r in attendance_df.iterrows():
@@ -244,7 +300,7 @@ class DataPipelineOrchestrator:
                     "roll_no": r.get("roll_no"),
                     "student_name": r.get("student_name"),
                     "section": r.get("section", "A"),
-                    "batch": r.get("batch", "2025-2029")
+                    "batch": batch_val
                 })
 
         if not records:
@@ -392,10 +448,10 @@ class DataPipelineOrchestrator:
 
             for _, r in results_df.iterrows():
                 self.db.add(Result(
-                    result_id=str(r.get("result_id", f"RES_{r['roll_no']}_{r['subject_code']}")),
+                    result_id=str(r.get("result_id", f"RES_S{r['semester']}_{r['roll_no']}_{r['subject_code']}")),
                     student_id=str(r.get("student_id", f"STU_{r['roll_no']}")),
                     roll_no=str(r["roll_no"]),
-                    subject_id=str(r.get("subject_id", f"SUB_{r['subject_code']}")),
+                    subject_id=str(r.get("subject_id", f"SUB_{r['semester']}_{r['subject_code']}")),
                     subject_code=str(r["subject_code"]),
                     semester=int(r["semester"]),
                     marks=float(r["marks"]) if pd.notna(r.get("marks")) else None,
@@ -406,10 +462,10 @@ class DataPipelineOrchestrator:
 
             for _, r in attendance_df.iterrows():
                 self.db.add(Attendance(
-                    attendance_id=str(r.get("attendance_id", f"ATT_{r['roll_no']}_{r['subject_code']}")),
+                    attendance_id=str(r.get("attendance_id", f"ATT_S{r['semester']}_{r['roll_no']}_{r['subject_code']}")),
                     student_id=str(r.get("student_id", f"STU_{r['roll_no']}")),
                     roll_no=str(r["roll_no"]),
-                    subject_id=str(r.get("subject_id", f"SUB_{r['subject_code']}")),
+                    subject_id=str(r.get("subject_id", f"SUB_{r['semester']}_{r['subject_code']}")),
                     subject_code=str(r["subject_code"]),
                     semester=int(r["semester"]),
                     attendance_percentage=float(r["attendance_percentage"]) if pd.notna(r.get("attendance_percentage")) else 0.0

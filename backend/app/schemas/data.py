@@ -27,7 +27,43 @@ class UploadResponse(BaseModel):
     row_count: int
     status: str
     uploaded_at: datetime
+    batch_name: Optional[str] = None
+    section: Optional[str] = None
     inspection: Optional[FileInspectionResult] = None
+
+class BatchCreate(BaseModel):
+    name: str
+    regulation: Optional[str] = "R22"
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+
+class BatchRead(BaseModel):
+    id: int
+    name: str
+    department: str
+    regulation: Optional[str] = None
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+    is_active: bool
+    created_at: datetime
+
+class SectionAttendanceSummary(BaseModel):
+    section: str
+    filename: str
+    row_count: int
+    uploaded_at: datetime
+
+class SemesterStatus(BaseModel):
+    semester: int
+    result_uploaded: bool = False
+    result_filename: Optional[str] = None
+    result_row_count: Optional[int] = None
+    result_uploaded_at: Optional[datetime] = None
+    attendance_sections: list[SectionAttendanceSummary] = []
+
+class BatchStatusResponse(BaseModel):
+    batch_name: str
+    semesters: list[SemesterStatus]
 
 class ProcessPipelineResponse(BaseModel):
     status: str

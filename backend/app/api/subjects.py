@@ -7,6 +7,7 @@ from backend.app.core.config import settings
 from backend.app.core.database import get_db
 from backend.app.api.auth import get_current_hod
 from backend.app.models.user import User
+from backend.app.models.subject import Subject
 from backend.app.schemas.subject import SubjectRead, SubjectMappingRead, SubjectListResponse
 
 router = APIRouter(prefix="/api/subjects", tags=["Subjects"])
@@ -14,9 +15,13 @@ router = APIRouter(prefix="/api/subjects", tags=["Subjects"])
 @router.get("", response_model=SubjectListResponse)
 def list_subjects(
     semester: Optional[int] = None,
-    current_user: User = Depends(get_current_hod)
+    current_user: User = Depends(get_current_hod),
+    db: Session = Depends(get_db)
 ):
     """List standardized CSM subjects by semester."""
+    if db.query(Subject).count() == 0:
+        return SubjectListResponse(total=0, items=[], mappings=[])
+
     subs_csv = settings.DATA_PROCESSED_DIR / "subjects.csv"
     if not subs_csv.exists():
         return SubjectListResponse(total=0, items=[], mappings=[])

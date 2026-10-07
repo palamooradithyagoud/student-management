@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutGrid, 
   Trophy, 
-  BookOpen
+  BookOpen,
+  Database,
+  FileText
 } from 'lucide-react';
 import CSMLogo from '@/components/CSMLogo';
 
@@ -14,6 +16,12 @@ const NAV_ITEMS = [
     name: 'Dashboard',
     href: '/dashboard',
     icon: LayoutGrid,
+    badge: null
+  },
+  {
+    name: 'Data Ingestion',
+    href: '/data',
+    icon: Database,
     badge: null
   },
   {
@@ -26,6 +34,12 @@ const NAV_ITEMS = [
     name: 'Subjects',
     href: '/subjects',
     icon: BookOpen,
+    badge: null
+  },
+  {
+    name: 'Reports',
+    href: '/reports',
+    icon: FileText,
     badge: null
   },
 ];

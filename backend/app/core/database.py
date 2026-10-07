@@ -28,6 +28,7 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db():
     """Create tables and ensure the default HOD user exists."""
+    import backend.app.models  # Ensures all model tables are registered with Base.metadata
     from backend.app.models.user import User
     from backend.app.core.security import get_password_hash
     

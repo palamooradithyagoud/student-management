@@ -16,7 +16,7 @@ class RawDataLoader:
     """
 
     @staticmethod
-    def load_dataset(file_path: Path, dataset_type: str, semester: int) -> pd.DataFrame:
+    def load_dataset(file_path: Path, dataset_type: str, semester: int, section: Optional[str] = None) -> pd.DataFrame:
         ext = file_path.suffix.lower()
         
         # Check if this is an authentic multi-level Result file
@@ -33,7 +33,7 @@ class RawDataLoader:
         # Check if this is an authentic multi-level Attendance file
         if "attendance" in dataset_type.lower() or "attendance" in file_path.name.lower():
             try:
-                df_att = RawDataLoader.load_matrix_attendance(file_path, semester)
+                df_att = RawDataLoader.load_matrix_attendance(file_path, semester, section=section)
                 if not df_att.empty:
                     df_att["dataset_type"] = dataset_type
                     return df_att
@@ -272,10 +272,10 @@ class RawDataLoader:
         return pd.DataFrame(rows_data)
 
     @staticmethod
-    def load_matrix_attendance(file_path: Path, semester: int) -> pd.DataFrame:
+    def load_matrix_attendance(file_path: Path, semester: int, section: Optional[str] = None) -> pd.DataFrame:
         """
         Parses authentic college attendance sheets with:
-        - Row 4: Subject Headers e.g. 'A9001 (MAC)' or 'A9002\\nODECV'
+        - Row 4: Subject Headers e.g. 'A9001 (MAC)' or 'A9002\nODECV'
         - Row 6: Conducted (C) and Attended (A) indicators
         - Row 7+: Student records with Roll Number and subject attendance counts.
         """
@@ -311,7 +311,7 @@ class RawDataLoader:
             if cur_sub_code and c_type:
                 sub_col_map[c] = (cur_sub_code, cur_sub_name, str(c_type).strip().upper())
 
-        sec_hint = "A" if ("_A" in file_path.name or "- A" in file_path.name) else ("B" if ("_B" in file_path.name or "- B" in file_path.name) else "C")
+        sec_hint = section or ("A" if ("_A" in file_path.name or "- A" in file_path.name) else ("B" if ("_B" in file_path.name or "- B" in file_path.name) else ("C" if ("_C" in file_path.name or "- C" in file_path.name) else "A")))
 
         records = []
         for r in range(7, ws.max_row + 1):
@@ -321,7 +321,7 @@ class RawDataLoader:
 
             roll_clean = str(roll).strip().upper()
             name_clean = str(ws.cell(row=r, column=name_col).value or "").strip() if name_col else None
-            sec_clean = str(ws.cell(row=r, column=sec_col).value or sec_hint).strip() if sec_col else sec_hint
+            sec_clean = str(ws.cell(row=r, column=sec_col).value).strip() if (sec_col and ws.cell(row=r, column=sec_col).value) else sec_hint
 
             sub_att: Dict[str, Dict[str, Any]] = {}
             for c, (sc, sn, ctype) in sub_col_map.items():

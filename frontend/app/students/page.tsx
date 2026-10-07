@@ -616,9 +616,9 @@ function StudentsContent() {
             <div className="flex items-center space-x-1 bg-slate-100/90 p-1 rounded-full text-xs font-semibold">
               {[
                 { label: 'All Sections', val: '' },
-                { label: 'Section A (65)', val: 'A' },
-                { label: 'Section B (64)', val: 'B' },
-                { label: 'Section C (64)', val: 'C' },
+                { label: 'Section A', val: 'A' },
+                { label: 'Section B', val: 'B' },
+                { label: 'Section C', val: 'C' },
               ].map((sec) => (
                 <button
                   key={sec.val}
@@ -1097,9 +1097,20 @@ function StudentsContent() {
                 ) : (
                   <tr>
                     <td colSpan={11} className="py-12 text-center text-slate-400">
-                      {debouncedSearch
-                        ? `No students found matching "${debouncedSearch}".`
-                        : 'No students found for this section or filter.'}
+                      {debouncedSearch ? (
+                        <span>No students found matching "{debouncedSearch}".</span>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="font-semibold text-slate-600">No student records found in database.</p>
+                          <p className="text-xs text-slate-400">Upload and process attendance and results in the Data Ingestion tab to populate the leaderboard.</p>
+                          <a
+                            href="/data"
+                            className="inline-block mt-2 px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors"
+                          >
+                            Go to Data Ingestion →
+                          </a>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}

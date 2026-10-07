@@ -9,6 +9,11 @@ from backend.app.core.database import get_db
 from backend.app.api.auth import get_current_hod
 from backend.app.models.user import User
 from backend.app.models.upload_log import UploadLog
+from backend.app.models.student import Student
+from backend.app.models.subject import Subject
+from backend.app.models.result import Result
+from backend.app.models.attendance import Attendance
+from backend.app.models.semester_summary import SemesterSummary
 from backend.app.schemas.dashboard import (
     DashboardOverviewResponse,
     AcademicDataOverview,
@@ -27,15 +32,84 @@ def get_dashboard_overview(
 ):
     """
     Retrieve comprehensive CSM HOD Dashboard overview statistics,
-    data quality health, mapping status, and recent uploads.
+    data quality health, mapping status, and recent uploads directly from database.
     """
+    # 1. Check live database state
+    db_students_count = db.query(Student).count()
+    db_results_count = db.query(Result).count()
+    db_attendance_count = db.query(Attendance).count()
+    db_subjects_count = db.query(Subject).count()
+    db_summary_count = db.query(SemesterSummary).count()
+
+    recent_records = db.query(UploadLog).order_by(UploadLog.uploaded_at.desc()).limit(10).all()
+    recent_uploads = []
+    for r in recent_records:
+        insp = FileInspectionResult(**r.meta_info) if r.meta_info else None
+        recent_uploads.append(UploadResponse(
+            id=r.id,
+            filename=r.filename,
+            dataset_type=r.dataset_type,
+            batch_name=r.batch_name,
+            section=r.section,
+            semester=r.semester,
+            file_size=r.file_size,
+            row_count=r.row_count,
+            status=r.status,
+            uploaded_at=r.uploaded_at,
+            inspection=insp
+        ))
+
+    # If database has NO students or NO results, return 100% clean empty state
+    if db_students_count == 0 or db_results_count == 0:
+        return {
+            "department_code": settings.DEPARTMENT_CODE,
+            "department_name": settings.DEPARTMENT_NAME,
+            "hod_username": current_user.username,
+            "overview": {
+                "total_students": 0,
+                "sem1_students": 0,
+                "sem2_students": 0,
+                "total_result_records": db_results_count,
+                "total_attendance_records": db_attendance_count,
+                "successfully_mapped_records": 0,
+                "mapping_success_rate": 0.0,
+                "data_quality_status": "NO_DATA"
+            },
+            "data_quality": {
+                "valid_records": 0,
+                "warnings": 0,
+                "errors": 0,
+                "records_requiring_review": 0
+            },
+            "student_presence": {
+                "present_in_all_datasets": 0,
+                "in_results_missing_attendance": 0,
+                "in_attendance_missing_results": 0,
+                "in_sem1_missing_sem2": 0,
+                "in_sem2_missing_sem1": 0
+            },
+            "dataset_summary": {
+                "master_rows": 0,
+                "students_count": db_students_count,
+                "subjects_count": db_subjects_count,
+                "results_count": db_results_count,
+                "attendance_count": db_attendance_count,
+                "semester_summaries_count": db_summary_count
+            },
+            "subject_cards": [],
+            "section_pass_rates": [],
+            "toppers": [],
+            "recent_student_activities": [],
+            "recent_uploads": recent_uploads,
+            "last_processed_at": None
+        }
+
     json_path = settings.DATA_REPORTS_DIR / "data_quality_report.json"
     quality_data = {}
     if json_path.exists():
         with open(json_path, "r", encoding="utf-8") as f:
             quality_data = json.load(f)
 
-    # Read row counts from processed files
     def count_csv(path: Path) -> int:
         if not path.exists():
             return 0
@@ -45,28 +119,26 @@ def get_dashboard_overview(
             return 0
 
     master_rows = count_csv(settings.DATA_PROCESSED_DIR / "master_dataset.csv")
-    students_count = count_csv(settings.DATA_PROCESSED_DIR / "students.csv")
-    subjects_count = count_csv(settings.DATA_PROCESSED_DIR / "subjects.csv")
-    results_count = count_csv(settings.DATA_PROCESSED_DIR / "results.csv")
-    attendance_count = count_csv(settings.DATA_PROCESSED_DIR / "attendance.csv")
-    semester_sum_count = count_csv(settings.DATA_PROCESSED_DIR / "semester_summary.csv")
+    students_count = db_students_count
+    subjects_count = db_subjects_count
+    results_count = db_results_count
+    attendance_count = db_attendance_count
+    semester_sum_count = db_summary_count
 
     stu_info = quality_data.get("students", {})
     mapping_info = quality_data.get("mapping", {})
     qual_info = quality_data.get("data_quality", {})
 
-    total_stus = stu_info.get("sem1_students", 0) if stu_info.get("sem1_students", 0) > students_count else students_count
-    sem1_stus = stu_info.get("sem1_students", 0)
-    sem2_stus = stu_info.get("sem2_students", 0)
+    total_stus = db_students_count
+    sem1_stus = db.query(SemesterSummary.student_id).filter(SemesterSummary.semester == 1).distinct().count()
+    sem2_stus = db.query(SemesterSummary.student_id).filter(SemesterSummary.semester == 2).distinct().count()
 
-    # Parse mapping success rate string like "98.5%" -> float
     raw_rate_str = str(mapping_info.get("mapping_success_rate", "0%")).replace("%", "")
     try:
         success_rate = float(raw_rate_str)
     except ValueError:
         success_rate = 0.0
 
-    # Determine health badge
     crit_errors = qual_info.get("critical_errors", 0)
     warnings = qual_info.get("warnings", 0)
     if master_rows == 0:
@@ -78,27 +150,12 @@ def get_dashboard_overview(
     else:
         quality_status = "NEEDS_REVIEW"
 
-    # Recent uploads
-    recent_records = db.query(UploadLog).order_by(UploadLog.uploaded_at.desc()).limit(10).all()
-    recent_uploads = []
-    for r in recent_records:
-        insp = FileInspectionResult(**r.meta_info) if r.meta_info else None
-        recent_uploads.append(UploadResponse(
-            id=r.id,
-            filename=r.filename,
-            dataset_type=r.dataset_type,
-            semester=r.semester,
-            file_size=r.file_size,
-            row_count=r.row_count,
-            status=r.status,
-            uploaded_at=r.uploaded_at,
-            inspection=insp
-        ))
-
     # Calculate dynamic subject analytics and student performance from master_dataset
     master_csv = settings.DATA_PROCESSED_DIR / "master_dataset.csv"
     subject_cards = []
     subject_chart = []
+    section_pass_rates = []
+    toppers = []
     recent_student_activities = []
 
     if master_csv.exists():
