@@ -1,5 +1,7 @@
+import json
 import os
 from pathlib import Path
+from typing import Union
 from urllib.parse import unquote, quote_plus
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
@@ -72,7 +74,7 @@ class Settings(BaseSettings):
     DATA_REPORTS_DIR: Path = BASE_DIR / "data" / "reports"
 
     # CORS
-    ALLOWED_ORIGINS: list[str] = [
+    ALLOWED_ORIGINS: Union[list[str], str] = [
         # Production — Vercel frontend
         "https://student-management-csm.vercel.app",
         "https://student-management-palamooradithyagouds-projects.vercel.app",
@@ -84,6 +86,21 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     ]
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def validate_allowed_origins(cls, v) -> list[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [o.strip() for o in v.replace(";", ",").split(",") if o.strip()]
+        return list(v) if v else []
 
     model_config = {
         "env_file": str(BASE_DIR / ".env"),
