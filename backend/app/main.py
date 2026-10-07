@@ -36,7 +36,12 @@ app = FastAPI(
 )
 
 # CORS Configuration
-origins = list(settings.ALLOWED_ORIGINS)
+if isinstance(settings.ALLOWED_ORIGINS, (list, tuple, set)):
+    origins = list(settings.ALLOWED_ORIGINS)
+elif isinstance(settings.ALLOWED_ORIGINS, str) and settings.ALLOWED_ORIGINS.strip():
+    origins = [s.strip() for s in settings.ALLOWED_ORIGINS.split(",") if s.strip()]
+else:
+    origins = []
 
 # Dynamically add from FRONTEND_URL or ALLOWED_ORIGINS env var if present
 extra_origins = os.getenv("ALLOWED_ORIGINS") or os.getenv("FRONTEND_URL")
