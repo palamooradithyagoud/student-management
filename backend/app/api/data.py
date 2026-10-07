@@ -405,7 +405,10 @@ def process_pipeline(
         generated_files=result["generated_files"],
         critical_errors=result["critical_errors"],
         warnings=result["warnings"],
-        records_requiring_review=result["records_requiring_review"]
+        records_requiring_review=result["records_requiring_review"],
+        # Detained students are normal institutional outcomes, not errors
+        detained_students_count=result.get("detained_students_count", 0),
+        detained_students=result.get("detained_students", [])
     )
 
 @router.get("/quality-report")

@@ -298,10 +298,11 @@ export default function DataPage() {
     formData.append('batch_name', selectedBatch);
 
     try {
-      const res = await api.post('/api/data/process', formData);
+      const res = await api.post('/api/data/process', formData, { timeout: 300000 });
       setProcessResult(res.data);
       await fetchBatchStatus(selectedBatch);
       await fetchLogsAndHistory();
+      alert(`Data pipeline executed successfully! Processed ${res.data.total_students || 0} students across ${res.data.total_results || 0} result records and ${res.data.total_attendance || 0} attendance records.`);
     } catch (err: any) {
       alert('Error executing data pipeline: ' + (err.response?.data?.detail || err.message));
     } finally {

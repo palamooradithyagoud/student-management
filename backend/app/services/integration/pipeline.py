@@ -206,13 +206,22 @@ class DataPipelineOrchestrator:
             attendance_val.get("invalid_attendance", 0) +
             (1 if student_val.get("total_distinct_students", 0) == 0 else 0)
         )
+
+        # Detained students: present in an earlier semester but absent from the next semester.
+        # This is a NORMAL institutional outcome (student held back / detained) — NOT a data error.
+        # We track them separately for informational purposes only.
+        detained_students = student_val.get("missing_from_sem2_dataset", [])
+        detained_count = student_val.get("counts", {}).get("missing_from_sem2_dataset", 0)
+
+        # Warnings only include genuine data quality issues — duplicate records,
+        # unmatched subjects, and students whose results/attendance don't align.
+        # missing_from_sem2_dataset is EXCLUDED because detained students are expected.
         warnings = (
             results_val.get("duplicate_records", 0) +
             attendance_val.get("duplicate_records", 0) +
             subject_mappings_stats.get("unmatched_subjects", 0) +
             student_val.get("counts", {}).get("in_results_missing_attendance", 0) +
-            student_val.get("counts", {}).get("in_attendance_missing_results", 0) +
-            student_val.get("counts", {}).get("missing_from_sem2_dataset", 0)
+            student_val.get("counts", {}).get("in_attendance_missing_results", 0)
         )
         records_requiring_review = warnings + critical_errors
 
@@ -265,6 +274,9 @@ class DataPipelineOrchestrator:
             "critical_errors": critical_errors,
             "warnings": warnings,
             "records_requiring_review": records_requiring_review,
+            # Detained students: in Sem N but not Sem N+1 — institutional detention, not data errors
+            "detained_students_count": detained_count,
+            "detained_students": detained_students,
             "quality_report": quality_report
         }
 
@@ -289,32 +301,30 @@ class DataPipelineOrchestrator:
         return df_clean
 
     def _build_students_table(self, results_df: pd.DataFrame, attendance_df: pd.DataFrame, batch_name: Optional[str] = None) -> pd.DataFrame:
-        records = []
         batch_val = batch_name or "2024-2028"
+        frames = []
         if not results_df.empty:
-            for _, r in results_df.iterrows():
-                records.append({
-                    "roll_no": r.get("roll_no"),
-                    "student_name": r.get("student_name"),
-                    "section": r.get("section", "A"),
-                    "batch": batch_val
-                })
+            cols = [c for c in ["roll_no", "student_name", "section"] if c in results_df.columns]
+            sub = results_df[cols].copy()
+            sub["batch"] = batch_val
+            frames.append(sub)
         if not attendance_df.empty:
-            for _, r in attendance_df.iterrows():
-                records.append({
-                    "roll_no": r.get("roll_no"),
-                    "student_name": r.get("student_name"),
-                    "section": r.get("section", "A"),
-                    "batch": batch_val
-                })
+            cols = [c for c in ["roll_no", "student_name", "section"] if c in attendance_df.columns]
+            sub = attendance_df[cols].copy()
+            sub["batch"] = batch_val
+            frames.append(sub)
 
-        if not records:
+        if not frames:
             df = pd.DataFrame(columns=["student_id", "roll_no", "student_name", "section", "batch"])
         else:
-            raw_df = pd.DataFrame(records).dropna(subset=["roll_no"])
+            raw_df = pd.concat(frames, ignore_index=True).dropna(subset=["roll_no"])
             df = raw_df.groupby("roll_no").first().reset_index()
             df["student_id"] = "STU_" + df["roll_no"].astype(str)
-            df = df[["student_id", "roll_no", "student_name", "section", "batch"]]
+            expected_cols = ["student_id", "roll_no", "student_name", "section", "batch"]
+            for col in expected_cols:
+                if col not in df.columns:
+                    df[col] = None
+            df = df[expected_cols]
 
         out_path = settings.DATA_PROCESSED_DIR / "students.csv"
         df.to_csv(out_path, index=False, encoding="utf-8")
@@ -378,20 +388,42 @@ class DataPipelineOrchestrator:
         return subs_df, subject_stats
 
     def _apply_standard_subject_codes(self, results_df: pd.DataFrame, attendance_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-        if not results_df.empty:
-            for idx, r in results_df.iterrows():
-                std_c, std_n, _ = SubjectMapper.map_subject(r.get("subject_code"), r.get("subject_name"), int(r.get("semester", 1)))
-                results_df.at[idx, "subject_code"] = std_c
-                results_df.at[idx, "subject_name"] = std_n
-                results_df.at[idx, "subject_id"] = f"SUB_{r.get('semester', 1)}_{std_c}"
+        """
+        Vectorized subject code standardization.
+        Instead of row-by-row iterrows() (O(n) slow), we:
+          1. Find all unique (subject_code, subject_name, semester) combos.
+          2. Map each unique combo once via SubjectMapper.
+          3. Merge back into the dataframe — O(unique_subjects) instead of O(rows).
+        """
+        def _vectorize_subject_map(df: pd.DataFrame) -> pd.DataFrame:
+            if df.empty:
+                return df
+            df = df.copy()
+            if "semester" not in df.columns:
+                df["semester"] = 1
 
-        if not attendance_df.empty:
-            for idx, r in attendance_df.iterrows():
-                std_c, std_n, _ = SubjectMapper.map_subject(r.get("subject_code"), r.get("subject_name"), int(r.get("semester", 1)))
-                attendance_df.at[idx, "subject_code"] = std_c
-                attendance_df.at[idx, "subject_name"] = std_n
-                attendance_df.at[idx, "subject_id"] = f"SUB_{r.get('semester', 1)}_{std_c}"
+            # Build unique key set and map once per unique combination
+            unique_combos = df[["subject_code", "subject_name", "semester"]].drop_duplicates()
+            mapping_cache: dict = {}
+            for _, row in unique_combos.iterrows():
+                key = (row["subject_code"], row["subject_name"], int(row["semester"]))
+                if key not in mapping_cache:
+                    std_c, std_n, _ = SubjectMapper.map_subject(row["subject_code"], row["subject_name"], int(row["semester"]))
+                    mapping_cache[key] = (std_c, std_n)
 
+            # Apply vectorized via map
+            keys = list(zip(
+                df["subject_code"].astype(object),
+                df["subject_name"].astype(object) if "subject_name" in df.columns else [""] * len(df),
+                df["semester"].astype(int)
+            ))
+            df["subject_code"] = [mapping_cache[k][0] for k in keys]
+            df["subject_name"] = [mapping_cache[k][1] for k in keys]
+            df["subject_id"] = "SUB_" + df["semester"].astype(str) + "_" + df["subject_code"].astype(str)
+            return df
+
+        results_df = _vectorize_subject_map(results_df)
+        attendance_df = _vectorize_subject_map(attendance_df)
         return results_df, attendance_df
 
     def _build_semester_summary(self, results_df: pd.DataFrame) -> pd.DataFrame:
@@ -441,14 +473,17 @@ class DataPipelineOrchestrator:
 
             self.db.commit()
 
-            for _, r in students_df.iterrows():
-                self.db.add(Student(
+            students_to_add = [
+                Student(
                     student_id=str(r["student_id"]),
                     roll_no=str(r["roll_no"]),
                     student_name=r.get("student_name"),
                     section=r.get("section"),
                     batch=r.get("batch")
-                ))
+                )
+                for _, r in students_df.iterrows()
+            ]
+            self.db.add_all(students_to_add)
 
             for _, r in subjects_df.iterrows():
                 s_id = str(r["subject_id"])
@@ -465,8 +500,8 @@ class DataPipelineOrchestrator:
                     existing_sub.subject_name = str(r["subject_name"])
                     existing_sub.credits = float(r["credits"]) if pd.notna(r.get("credits")) else None
 
-            for _, r in results_df.iterrows():
-                self.db.add(Result(
+            results_to_add = [
+                Result(
                     result_id=str(r.get("result_id", f"RES_S{r['semester']}_{r['roll_no']}_{r['subject_code']}")),
                     student_id=str(r.get("student_id", f"STU_{r['roll_no']}")),
                     roll_no=str(r["roll_no"]),
@@ -477,10 +512,13 @@ class DataPipelineOrchestrator:
                     grade=str(r["grade"]) if pd.notna(r.get("grade")) else None,
                     grade_point=float(r.get("grade_points", r.get("grade_point", 0.0))) if pd.notna(r.get("grade_points", r.get("grade_point"))) else None,
                     status=str(r["status"]) if pd.notna(r.get("status")) else None
-                ))
+                )
+                for _, r in results_df.iterrows()
+            ]
+            self.db.add_all(results_to_add)
 
-            for _, r in attendance_df.iterrows():
-                self.db.add(Attendance(
+            attendance_to_add = [
+                Attendance(
                     attendance_id=str(r.get("attendance_id", f"ATT_S{r['semester']}_{r['roll_no']}_{r['subject_code']}")),
                     student_id=str(r.get("student_id", f"STU_{r['roll_no']}")),
                     roll_no=str(r["roll_no"]),
@@ -488,16 +526,22 @@ class DataPipelineOrchestrator:
                     subject_code=str(r["subject_code"]),
                     semester=int(r["semester"]),
                     attendance_percentage=float(r["attendance_percentage"]) if pd.notna(r.get("attendance_percentage")) else 0.0
-                ))
+                )
+                for _, r in attendance_df.iterrows()
+            ]
+            self.db.add_all(attendance_to_add)
 
-            for _, r in semester_summary_df.iterrows():
-                self.db.add(SemesterSummary(
+            summaries_to_add = [
+                SemesterSummary(
                     student_id=str(r["student_id"]),
                     roll_no=str(r["roll_no"]),
                     semester=int(r["semester"]),
                     sgpa=float(r["sgpa"]) if pd.notna(r.get("sgpa")) else None,
                     backlog_count=int(r["backlog_count"]) if pd.notna(r.get("backlog_count")) else None
-                ))
+                )
+                for _, r in semester_summary_df.iterrows()
+            ]
+            self.db.add_all(summaries_to_add)
 
             self.db.commit()
         except Exception as e:

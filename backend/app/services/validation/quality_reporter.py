@@ -94,7 +94,7 @@ STUDENTS
 Sem 1 students: {report_data['students']['sem1_students']}
 Sem 2 students: {report_data['students']['sem2_students']}
 Matched students: {report_data['students']['matched_students']}
-Students missing from Sem 2: {report_data['students']['students_missing_from_sem2']}
+Detained students (in Sem 1, absent from Sem 2 - institutional, NOT a data error): {report_data['students']['students_missing_from_sem2']}
 
 RESULTS
 -------

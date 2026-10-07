@@ -81,6 +81,9 @@ class ProcessPipelineResponse(BaseModel):
     critical_errors: int
     warnings: int
     records_requiring_review: int
+    # Detained students: in Sem 1 but absent from Sem 2 — institutional detention, not data errors
+    detained_students_count: Optional[int] = 0
+    detained_students: Optional[list[str]] = []
 
 class CleaningLogEntry(BaseModel):
     source_file: str
