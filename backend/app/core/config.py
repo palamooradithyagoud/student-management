@@ -74,35 +74,40 @@ class Settings(BaseSettings):
     DATA_REPORTS_DIR: Path = BASE_DIR / "data" / "reports"
 
     # CORS
-    ALLOWED_ORIGINS: Any = [
-        # Production — Vercel frontend
-        "https://student-management-csm.vercel.app",
-        "https://student-management-palamooradithyagouds-projects.vercel.app",
-        # Production — old Render deploy (kept for compatibility)
-        "https://student-management-frontend-hr9l.onrender.com",
-        # Local development
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ]
-
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def validate_allowed_origins(cls, v) -> list[str]:
-        if isinstance(v, str):
-            v = v.strip()
-            if not v:
-                return []
-            if v.startswith("[") and v.endswith("]"):
+    @property
+    def ALLOWED_ORIGINS(self) -> list[str]:
+        origins = [
+            # Production — Vercel frontend
+            "https://student-management-csm.vercel.app",
+            "https://student-management-palamooradithyagouds-projects.vercel.app",
+            # Production — old Render deploy (kept for compatibility)
+            "https://student-management-frontend-hr9l.onrender.com",
+            # Local development
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ]
+        raw = os.getenv("ALLOWED_ORIGINS", "")
+        if raw:
+            raw_clean = raw.strip()
+            if raw_clean.startswith("[") and raw_clean.endswith("]"):
                 try:
-                    return json.loads(v)
+                    import json
+                    parsed = json.loads(raw_clean)
+                    if isinstance(parsed, list):
+                        for item in parsed:
+                            clean_item = str(item).strip()
+                            if clean_item and clean_item not in origins:
+                                origins.append(clean_item)
+                        return origins
                 except Exception:
                     pass
-            return [o.strip() for o in v.replace(";", ",").split(",") if o.strip()]
-        if isinstance(v, (list, tuple, set)):
-            return list(v)
-        return []
+            for o in raw_clean.replace(";", ",").split(","):
+                cleaned = o.strip()
+                if cleaned and cleaned not in origins:
+                    origins.append(cleaned)
+        return origins
 
     model_config = {
         "env_file": str(BASE_DIR / ".env"),
